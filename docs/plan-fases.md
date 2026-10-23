@@ -2,8 +2,8 @@
 
 | # | Fase | Qué se construye | Capítulos del libro | Estado |
 | --- | --- | --- | --- | --- |
-| 0 | Preparación y núcleo | Estructura, `.env`, docker-compose de 8 contenedores, health checks | 1–3, Ap. F | En curso |
-| 1 | Requisitos y arquitectura | Documento de requisitos del caso B2B, decisiones de arquitectura | 4 | Pendiente |
+| 0 | Preparación y núcleo | Estructura, `.env`, docker-compose de 8 contenedores, health checks | 1–3, Ap. F | Hecha |
+| 1 | Requisitos y arquitectura | `docs/requisitos.md`, `docs/arquitectura.md` y `docs/adr/` | 4 | En curso |
 | 2 | Base de datos | Modelos SQLAlchemy en 3 esquemas, Alembic, borrado lógico y auditoría | 5, Ap. A | Pendiente |
 | 3 | Seguridad e IAM | JWT con refresh, MFA, roles por aplicación, cabeceras OWASP, rate limiting | 6 | Pendiente |
 | 4 | Backend | Blueprints de negocio, colas Celery, tareas programadas, servicios de negocio | 7–10, Ap. B | Pendiente |
