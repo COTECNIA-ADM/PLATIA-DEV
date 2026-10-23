@@ -4,6 +4,7 @@ Nunca se escriben secretos en el código: si falta una variable crítica,
 el arranque falla con un mensaje claro.
 """
 import os
+from datetime import timedelta
 from urllib.parse import quote_plus
 
 REQUIRED_ENV_VARS = [
@@ -15,6 +16,8 @@ REQUIRED_ENV_VARS = [
     "APP_SECRET_KEY",
     "AI_SERVICE_URL",
     "AI_SERVICE_API_KEY",
+    "JWT_SECRET_KEY",
+    "MFA_ENCRYPTION_KEY",
 ]
 
 
@@ -23,7 +26,8 @@ def validate_env() -> None:
     if missing:
         raise RuntimeError(
             f"Faltan variables de entorno obligatorias: {', '.join(missing)}. "
-            "Revisa el fichero .env (plantilla en .env.example)."
+            "Revisa el fichero .env (plantilla en .env.example). Si vienes de una fase "
+            "anterior, ejecuta: python scripts/generate_env.py --actualizar"
         )
 
 
@@ -75,6 +79,39 @@ class Config:
         )
         self.QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
         self.HEALTH_TIMEOUT_SECONDS = float(os.environ.get("HEALTH_TIMEOUT_SECONDS", "3"))
+        _security_settings(self)
+
+
+def _security_settings(cfg, env=None) -> None:
+    """Seguridad e IAM (Capítulo 6, ADR-009). Valores por defecto del libro."""
+    env = os.environ if env is None else env
+
+    def _minutes(var: str, default: str) -> timedelta:
+        return timedelta(minutes=int(env.get(var, default)))
+
+    cfg.JWT_SECRET_KEY = env["JWT_SECRET_KEY"]
+    cfg.JWT_ACCESS_TOKEN_EXPIRES = _minutes("JWT_ACCESS_MINUTES", "30")
+    cfg.JWT_REFRESH_TOKEN_EXPIRES = _minutes("JWT_REFRESH_MINUTES", "480")  # 8 horas
+    # El token de acceso viaja en la cabecera Authorization. El de refresco, en
+    # una cookie HttpOnly SameSite=Strict limitada a /api/auth (no la lee JavaScript).
+    cfg.JWT_TOKEN_LOCATION = ["headers", "cookies"]
+    cfg.JWT_REFRESH_COOKIE_NAME = "platia_refresh"
+    cfg.JWT_REFRESH_COOKIE_PATH = "/api/auth"
+    cfg.JWT_COOKIE_SAMESITE = "Strict"
+    cfg.JWT_COOKIE_SECURE = env.get("COOKIE_SECURE", "false").lower() == "true"
+    cfg.JWT_COOKIE_CSRF_PROTECT = False  # cubierto por SameSite=Strict (ADR-009)
+    cfg.JWT_SESSION_COOKIE = False
+    cfg.MFA_ENCRYPTION_KEY = env["MFA_ENCRYPTION_KEY"]
+    cfg.MFA_ISSUER = env.get("MFA_ISSUER", "PLATIA")
+    cfg.BCRYPT_ROUNDS = int(env.get("BCRYPT_ROUNDS", "12"))
+    cfg.PASSWORD_MIN_LENGTH = int(env.get("PASSWORD_MIN_LENGTH", "12"))
+    cfg.LOGIN_MAX_FAILURES = int(env.get("LOGIN_MAX_FAILURES", "5"))
+    cfg.LOGIN_LOCK_MINUTES = int(env.get("LOGIN_LOCK_MINUTES", "15"))
+    cfg.PERMISSIONS_CACHE_SECONDS = int(env.get("PERMISSIONS_CACHE_SECONDS", "300"))
+    # Peticiones por minuto: REST, operaciones de IA y login (Capítulo 6)
+    cfg.RATE_LIMIT_DEFAULT = int(env.get("RATE_LIMIT_DEFAULT", "30"))
+    cfg.RATE_LIMIT_AI = int(env.get("RATE_LIMIT_AI", "10"))
+    cfg.RATE_LIMIT_LOGIN = int(env.get("RATE_LIMIT_LOGIN", "5"))
 
 
 class TestConfig:
@@ -92,3 +129,14 @@ class TestConfig:
     QDRANT_URL = "http://qdrant:6333"
     QDRANT_API_KEY = ""
     HEALTH_TIMEOUT_SECONDS = 0.5
+
+    def __init__(self) -> None:
+        # Valores fijos solo para tests; no leen el entorno
+        _security_settings(
+            self,
+            {
+                "JWT_SECRET_KEY": "test-jwt-secret-con-longitud-suficiente-32",
+                "MFA_ENCRYPTION_KEY": "Y2xhdmUtZGUtdGVzdC1zb2xvLXBhcmEtcHl0ZXN0ISE=",
+                "BCRYPT_ROUNDS": "4",  # rápido en tests
+            },
+        )

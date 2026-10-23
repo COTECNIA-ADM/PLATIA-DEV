@@ -14,3 +14,4 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [006](ADR-006-crecimiento-incremental.md) | Empezar con 8 contenedores y crecer con motivos concretos | Aceptado |
 | [007](ADR-007-modelos-configurables.md) | Modelos y proveedores de LLM configurables | Aceptado |
 | [008](ADR-008-migraciones-multi-bind.md) | Modelos y migraciones en tres esquemas | Aceptado |
+| [009](ADR-009-seguridad-iam.md) | JWT con refresco rotatorio, MFA TOTP y roles por aplicación verificados en BD | Aceptado |

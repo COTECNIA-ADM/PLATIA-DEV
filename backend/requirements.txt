@@ -9,3 +9,6 @@ gunicorn~=23.0
 requests~=2.32
 structlog~=25.1
 flask-migrate~=4.1
+flask-jwt-extended~=4.7
+bcrypt~=4.2
+pyotp~=2.9

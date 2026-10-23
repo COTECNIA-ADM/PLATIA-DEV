@@ -72,6 +72,8 @@ jobs:
       APP_SECRET_KEY: ci-secret
       AI_SERVICE_URL: http://localhost:8000
       AI_SERVICE_API_KEY: no-usado
+      JWT_SECRET_KEY: ci-jwt-secret-solo-para-la-ci-0123456789
+      MFA_ENCRYPTION_KEY: Y2xhdmUtZGUtdGVzdC1zb2xvLXBhcmEtcHl0ZXN0ISE=
       FLASK_APP: wsgi.py
     defaults:
       run:
