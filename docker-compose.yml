@@ -1,0 +1,168 @@
+# Núcleo mínimo de la Plataforma: 8 contenedores en 4 capas.
+# Versión completa del libro: 17 servicios (Capítulo 4). Se ampliará por fases.
+#
+# Arranque:  python scripts/generate_env.py && docker compose up -d --build
+# Estado:    http://localhost:8080  (o el puerto de HTTP_PORT)
+
+x-backend-env: &backend-env
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_USER: ${DB_USER}
+  DB_PASSWORD: ${DB_PASSWORD}
+  DB_NAME_CORE: ${DB_NAME_CORE}
+  DB_NAME_OPS: ${DB_NAME_OPS}
+  DB_NAME_ANALYTICS: ${DB_NAME_ANALYTICS}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+  DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  REDIS_DB_CACHE: ${REDIS_DB_CACHE:-0}
+  REDIS_DB_CELERY: ${REDIS_DB_CELERY:-1}
+  APP_SECRET_KEY: ${APP_SECRET_KEY}
+  AI_SERVICE_URL: http://ai_service:8000
+  AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY}
+  QDRANT_HOST: qdrant
+  QDRANT_PORT: "6333"
+  QDRANT_API_KEY: ${QDRANT_API_KEY}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  TIMEZONE: ${TIMEZONE:-Europe/Madrid}
+
+services:
+  # ======================================================
+  # CAPA DE DATOS: solo accesible desde data_net
+  # ======================================================
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      DB_NAME_CORE: ${DB_NAME_CORE}
+      DB_NAME_OPS: ${DB_NAME_OPS}
+      DB_NAME_ANALYTICS: ${DB_NAME_ANALYTICS}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 2g
+    restart: unless-stopped
+    networks: [data_net]
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [data_net]
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    volumes:
+      - qdrant_data:/qdrant/storage
+    mem_limit: 2g
+    restart: unless-stopped
+    networks: [data_net]
+
+  # ======================================================
+  # CAPA DE APLICACIÓN: backend_net + data_net
+  # ======================================================
+  backend:
+    build: ./backend
+    environment: *backend-env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 1g
+    restart: unless-stopped
+    networks: [backend_net, data_net]
+
+  ai_service:
+    build: ./ai_service
+    environment:
+      AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLAUDE_DEFAULT_MODEL: ${CLAUDE_DEFAULT_MODEL:-claude-sonnet-5-5}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on: [qdrant]
+    mem_limit: 2g
+    restart: unless-stopped
+    networks: [backend_net, data_net]
+
+  # ======================================================
+  # CAPA DE WORKERS: mismo build que el backend
+  # ======================================================
+  celery_worker:
+    build: ./backend
+    command: ["celery", "-A", "celery_app", "worker", "-Q", "default,documents,ai", "-c", "2", "--loglevel=info"]
+    environment: *backend-env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 1g
+    restart: unless-stopped
+    networks: [backend_net, data_net]
+
+  # ======================================================
+  # CAPA DE FRONTALES
+  # ======================================================
+  frontend:
+    build: ./frontend
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [frontend_net]
+
+  # ======================================================
+  # PROXY INVERSO: único servicio con puerto publicado
+  # ======================================================
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [backend, frontend]
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [frontend_net, backend_net]
+
+# Redes con mínimo privilegio: los datos nunca son visibles desde el proxy
+networks:
+  frontend_net:
+  backend_net:
+  data_net:
+
+volumes:
+  mysql_data:
+  redis_data:
+  qdrant_data:
