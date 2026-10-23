@@ -31,7 +31,8 @@ def main() -> int:
             line = line.replace(PLACEHOLDER, secrets.token_urlsafe(32))
         lines.append(line)
 
-    TARGET.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # newline="\n": en Windows también LF, como espera Docker Compose
+    TARGET.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     try:
         TARGET.chmod(0o600)
     except OSError:

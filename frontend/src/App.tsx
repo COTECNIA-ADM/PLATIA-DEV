@@ -59,6 +59,7 @@ export default function App() {
               <span>
                 {LABELS[s.name] ?? s.name}
                 {s.detail && <small>{s.detail}</small>}
+                {s.error && <small>Error: {s.error}. Revisa: docker compose logs</small>}
               </span>
               <strong>{STATUS_TEXT[s.status]}</strong>
             </li>

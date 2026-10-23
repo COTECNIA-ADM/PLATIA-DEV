@@ -23,6 +23,15 @@ el servicio de IA aparece en **Aviso**; el resto debe estar en **OK**.
 - Comprobación completa: `curl http://localhost:8080/api/health/full`
 - Parar: `docker compose down` (añade `-v` para borrar también los datos)
 
+## Si algo sale «Caído»
+
+1. `docker compose ps` y `docker compose logs mysql` (o el servicio que falle).
+2. MySQL solo ejecuta `database/init/` la primera vez, con el volumen vacío. Si cambias
+   ese script o falló al arrancar, recrea el volumen: `docker compose down -v` y vuelve a
+   levantar (borra los datos de MySQL, Redis y Qdrant).
+3. En Windows, el repositorio fuerza finales de línea LF (`.gitattributes`). Si clonaste
+   antes de que existiera ese fichero, clona de nuevo.
+
 ## Contenedores del núcleo
 
 | Servicio | Imagen | Red | Función |
