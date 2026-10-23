@@ -1,3 +1,4 @@
+from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
@@ -15,3 +16,4 @@ NAMING_CONVENTION = {
 db = SQLAlchemy(metadata=MetaData(naming_convention=NAMING_CONVENTION))
 # Migraciones multi-bind: una revisión con funciones por esquema (ADR-008)
 migrate = Migrate(directory="migrations", compare_type=True)
+jwt = JWTManager()

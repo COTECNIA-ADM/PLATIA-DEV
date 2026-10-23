@@ -5,6 +5,7 @@ from .base import utcnow
 from .core import (
     App,
     AppRole,
+    AuditAction,
     AuditLog,
     LLMModelPricing,
     LLMQualityScore,
@@ -13,6 +14,7 @@ from .core import (
     Prompt,
     User,
     UserAppMembership,
+    UserSession,
 )
 from .operations import (
     Alert,

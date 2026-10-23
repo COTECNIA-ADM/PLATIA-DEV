@@ -3,7 +3,8 @@
 - /api/health       comprobación rápida: base de datos y Redis.
 - /api/health/full  comprobación completa: los 3 esquemas, Redis, Qdrant y el servicio de IA.
 
-En la fase 3 /api/health/full pasará a exigir rol de administrador.
+/api/health es público (lo usan Docker y Nginx). /api/health/full exige sesión y
+el permiso health.read (rol de administración), porque describe la infraestructura.
 """
 from collections.abc import Callable
 
@@ -14,6 +15,7 @@ from flask import Blueprint, current_app, jsonify
 from sqlalchemy import text
 
 from ..extensions import db
+from ..security.context import platform_guard, require_permission
 
 health_bp = Blueprint("health", __name__, url_prefix="/api/health")
 log = structlog.get_logger()
@@ -100,6 +102,8 @@ def quick():
 
 
 @health_bp.get("/full")
+@platform_guard
+@require_permission("health", "read")
 def full():
     return _summary(
         [

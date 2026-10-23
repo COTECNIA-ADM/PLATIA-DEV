@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
@@ -44,8 +45,12 @@ class User(BusinessMixin, db.Model):
     is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     mfa_secret_encrypted: Mapped[str | None] = mapped_column(String(255))
+    # [{"salt": ..., "hash": ..., "used_at": null}], SHA-256 con sal por código (Cap. 6)
+    mfa_backup_codes: Mapped[list | None] = mapped_column(JSON)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     memberships: Mapped[list["UserAppMembership"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -78,8 +83,13 @@ class AppRole(TimestampMixin, db.Model):
     app_id: Mapped[int] = mapped_column(ForeignKey("apps.id"), nullable=False)
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    # Lista de permisos "recurso:acción", p. ej. ["opportunities:read", "proposals:write"]
-    permissions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Acciones permitidas por módulo, p. ej. {"proposals": ["read", "write"],
+    # "ai_modules_access": ["document_analyzer"]}. Lo que no aparece está denegado.
+    permissions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Un rol de administrador salta la comprobación de módulo, solo dentro de su app
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0"), nullable=False
+    )
 
     app: Mapped[App] = relationship(back_populates="roles")
 
@@ -103,12 +113,38 @@ class UserAppMembership(AuditMixin, db.Model):
 
 
 # ---------------------------------------------------------------- Auditoría (Cap. 22)
+class AuditAction:
+    """Acciones de auditoría predefinidas: nunca texto libre (Cap. 22)."""
+
+    LOGIN_SUCCESS = "LOGIN_SUCCESS"
+    LOGIN_FAILED = "LOGIN_FAILED"
+    ACCOUNT_LOCKED = "ACCOUNT_LOCKED"
+    LOGOUT = "LOGOUT"
+    TOKEN_REFRESH = "TOKEN_REFRESH"
+    REFRESH_TOKEN_REUSE = "REFRESH_TOKEN_REUSE"
+    SESSION_INVALIDATED = "SESSION_INVALIDATED"
+    PASSWORD_CHANGED = "PASSWORD_CHANGED"
+    MFA_ENABLED = "MFA_ENABLED"
+    MFA_DISABLED = "MFA_DISABLED"
+    MFA_FAILED = "MFA_FAILED"
+    MFA_BACKUP_CODE_USED = "MFA_BACKUP_CODE_USED"
+    ACCESS_DENIED = "ACCESS_DENIED"
+    RATE_LIMITED = "RATE_LIMITED"
+    ROLE_ASSIGNED = "ROLE_ASSIGNED"
+    USER_CREATED = "USER_CREATED"
+    USER_DEACTIVATED = "USER_DEACTIVATED"
+
+
 class AuditLog(db.Model):
     """Registro inmutable de acciones relevantes. Solo se inserta, nunca se modifica."""
 
     __bind_key__ = BIND
     __tablename__ = "audit_log"
-    __table_args__ = (Index("ix_audit_log_action_created", "action", "created_at"),)
+    __table_args__ = (
+        Index("ix_audit_log_action_created", "action", "created_at"),
+        Index("ix_audit_log_user_action", "user_id", "action"),
+        Index("ix_audit_log_severity_created", "severity", "created_at"),
+    )
 
     SEVERITIES = ("INFO", "WARNING", "CRITICAL")
 
@@ -118,10 +154,30 @@ class AuditLog(db.Model):
     user_id: Mapped[int | None] = mapped_column(Integer, index=True)
     resource_type: Mapped[str | None] = mapped_column(String(60))
     resource_id: Mapped[str | None] = mapped_column(String(64))
-    ip_address: Mapped[str | None] = mapped_column(String(45))
+    ip_address: Mapped[str | None] = mapped_column(String(45))  # cabe IPv6
+    user_agent: Mapped[str | None] = mapped_column(String(500))
     request_id: Mapped[str | None] = mapped_column(String(64))
     details: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+class UserSession(db.Model):
+    """Una sesión por token de refresco. Rotación: cada uso revoca la fila y crea otra."""
+
+    __bind_key__ = BIND
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    refresh_jti: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    family_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    revocation_reason: Mapped[str | None] = mapped_column(String(50))
 
 
 # ---------------------------------------------------------------- Gobernanza IA (Cap. 11)

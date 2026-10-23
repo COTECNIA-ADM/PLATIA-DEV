@@ -23,6 +23,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Frontal: `cd frontend && npm ci && npm run build`
 - Migraciones: las aplica el contenedor `migrations` al levantar; guía en `docs/migraciones.md`
 - Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
+- Primer administrador: `docker compose run --rm migrations flask create-admin --email ... --name ...`
+- Variables nuevas tras un `git pull`: `python scripts/generate_env.py --actualizar`
 
 ## Convenciones obligatorias
 - Logs con `structlog`, nunca `print()`.
@@ -33,7 +35,9 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Datos de negocio con borrado lógico (`is_active`, `deleted_at`) y auditoría
   (`created_at`, `updated_at`, `created_by`).
 - Cambios de esquema siempre con migraciones Alembic (desde la fase 2).
-- Todo endpoint nuevo lleva autenticación y comprobación de permisos (desde la fase 3).
+- Todo endpoint nuevo lleva `@platform_guard`, `@require_permission(módulo, acción)` y
+  `@rate_limit()` (guía en `docs/seguridad.md`). Permisos siempre desde la BD, nunca del JWT;
+  default-deny.
 - Cada llamada a un LLM se registra con modelo, tokens, coste y latencia (desde la fase 5).
 - Los prompts viven en base de datos y se versionan, no en el código (desde la fase 5).
 

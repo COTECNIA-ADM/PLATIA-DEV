@@ -21,27 +21,46 @@ APPS = [
     ("security", "Seguridad", "Auditoría y eventos de seguridad"),
 ]
 
-# Permisos "recurso:acción" por rol. Se aplican en la fase 3.
+# Roles por aplicación (Capítulo 6). Permisos: {módulo: [acciones]}. Lo que no
+# aparece está denegado. Los roles con is_admin=True tienen todo, solo en su app.
+R, RW = ["read"], ["read", "write"]
+AI_ALL = ["document_analyzer", "proposal_generator", "cv_analyzer", "copilot_chat"]
 ROLES = {
     "operations": {
-        "viewer": ("Consulta", ["clients:read", "opportunities:read", "documents:read", "proposals:read"]),
-        "editor": (
-            "Gestor comercial",
-            ["clients:read", "clients:write", "opportunities:read", "opportunities:write",
-             "documents:read", "documents:write", "proposals:read", "proposals:write"],
-        ),
-        "admin": ("Responsable", ["operations:*"]),
+        "admin": ("Administrador de operaciones", True, {}),
+        "manager": ("Responsable comercial", False, {
+            "clients": RW, "opportunities": RW, "documents": ["read", "write", "upload"],
+            "proposals": ["read", "write", "delete"], "reports": ["read", "generate"],
+            "ai_modules_access": AI_ALL,
+        }),
+        "analyst": ("Analista", False, {
+            "clients": R, "opportunities": RW, "documents": ["read", "upload"], "proposals": RW,
+            "reports": R, "ai_modules_access": ["document_analyzer", "copilot_chat"],
+        }),
+        "viewer": ("Consulta", False, {
+            "clients": R, "opportunities": R, "documents": R, "proposals": R, "reports": R,
+            "ai_modules_access": [],
+        }),
     },
     "analytics": {
-        "viewer": ("Consulta", ["dashboards:read"]),
-        "admin": ("Responsable", ["analytics:*"]),
+        "admin": ("Administrador de analítica", True, {}),
+        "analyst": ("Analista de negocio", False, {"dashboards": RW, "reports": ["read", "generate"],
+                                                   "ai_modules_access": ["copilot_chat"]}),
+        "viewer": ("Consulta", False, {"dashboards": R, "reports": R, "ai_modules_access": []}),
     },
     "admin": {
-        "admin": ("Administrador", ["users:*", "roles:*", "llm:*", "prompts:*"]),
+        "superadmin": ("Superadministrador", True, {}),
+        "admin": ("Administrador", False, {
+            "users": RW, "roles": RW, "llm_config": RW, "prompts": RW, "audit": R, "health": R,
+        }),
+        "auditor": ("Auditor", False, {
+            "users": R, "roles": R, "llm_config": R, "prompts": R, "audit": R, "health": R,
+        }),
     },
     "security": {
-        "auditor": ("Auditor", ["audit:read"]),
-        "admin": ("Responsable de seguridad", ["security:*"]),
+        "security_admin": ("Responsable de seguridad", True, {}),
+        "security_analyst": ("Analista de seguridad", False, {"audit": R, "alerts": RW, "guardrails": R}),
+        "viewer": ("Consulta", False, {"audit": R, "alerts": R}),
     },
 }
 
@@ -77,9 +96,10 @@ def run_seeds() -> dict[str, int]:
     for app_code, roles in ROLES.items():
         app = apps[app_code]
         existing = {r.code for r in db.session.scalars(db.select(AppRole).filter_by(app_id=app.id))}
-        for code, (name, permissions) in roles.items():
+        for code, (name, is_admin, permissions) in roles.items():
             if code not in existing:
-                db.session.add(AppRole(app_id=app.id, code=code, name=name, permissions=permissions))
+                db.session.add(AppRole(app_id=app.id, code=code, name=name, is_admin=is_admin,
+                                       permissions=permissions))
                 created["roles"] += 1
 
     for service_type, model, fallback, max_tokens in LLM_SERVICES:

@@ -16,12 +16,31 @@ python scripts/generate_env.py      # crea .env con secretos aleatorios
 docker compose up -d --build
 ```
 
-Abre http://localhost:8080: verás el estado de cada servicio. Sin `ANTHROPIC_API_KEY`
+Abre http://localhost:8080: verás el estado básico de los servicios; el completo, al
+iniciar sesión como administrador. Sin `ANTHROPIC_API_KEY`
 el servicio de IA aparece en **Aviso**; el resto debe estar en **OK**.
 
 - Comprobación rápida: `curl http://localhost:8080/api/health`
 - Comprobación completa: `curl http://localhost:8080/api/health/full`
 - Parar: `docker compose down` (añade `-v` para borrar también los datos)
+
+La primera vez, crea tu usuario administrador (la contraseña se pide por teclado y no
+se muestra) y entra en http://localhost:8080:
+
+```bash
+docker compose run --rm migrations flask create-admin --email tu@empresa.com --name "Tu Nombre"
+```
+
+Más en [docs/seguridad.md](docs/seguridad.md).
+
+### Al actualizar a una fase nueva
+
+```bash
+git checkout main
+git pull
+python scripts/generate_env.py --actualizar   # añade a .env las variables nuevas
+docker compose up -d --build --force-recreate
+```
 
 Al arrancar, el contenedor `migrations` crea las tablas de los tres esquemas y carga los
 datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía en
