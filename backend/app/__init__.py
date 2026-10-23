@@ -4,7 +4,7 @@ import uuid
 import structlog
 from flask import Flask, g, request
 
-from .extensions import db
+from .extensions import db, migrate
 from .logging_config import configure_logging
 
 
@@ -19,6 +19,12 @@ def create_app(config: object | None = None) -> Flask:
     app.config.from_object(config)
 
     db.init_app(app)
+    migrate.init_app(app, db)
+
+    from . import models  # noqa: F401  (registra las tablas para Alembic)
+    from .cli import register_cli
+
+    register_cli(app)
 
     @app.before_request
     def bind_request_id() -> None:

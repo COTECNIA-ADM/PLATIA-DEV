@@ -21,11 +21,15 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Tests backend: `cd backend && pip install -r requirements-dev.txt && pytest`
 - Tests IA: `cd ai_service && pip install -r requirements-dev.txt && pytest`
 - Frontal: `cd frontend && npm ci && npm run build`
+- Migraciones: las aplica el contenedor `migrations` al levantar; guía en `docs/migraciones.md`
+- Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
 
 ## Convenciones obligatorias
 - Logs con `structlog`, nunca `print()`.
 - Toda configuración y secreto sale de variables de entorno; plantilla en `.env.example`.
-- Cada modelo declara `__bind_key__` (`core`, `operations` o `analytics`).
+- Cada modelo declara `__bind_key__` (`core`, `operations` o `analytics`). Sin claves
+  foráneas entre esquemas: los ids de usuario se guardan como enteros (ADR-008).
+- Fechas por defecto con funciones (`default=utcnow`), nunca `default=datetime.now(...)`.
 - Datos de negocio con borrado lógico (`is_active`, `deleted_at`) y auditoría
   (`created_at`, `updated_at`, `created_by`).
 - Cambios de esquema siempre con migraciones Alembic (desde la fase 2).

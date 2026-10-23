@@ -48,6 +48,52 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  migrations:
+    # Aplica las migraciones en un MySQL 8.0 real: upgrade, sin deriva, downgrade y upgrade
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_USER: platia
+          MYSQL_PASSWORD: ci-pass
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_USER: platia
+      DB_PASSWORD: ci-pass
+      REDIS_HOST: localhost
+      REDIS_PASSWORD: no-usado
+      APP_SECRET_KEY: ci-secret
+      AI_SERVICE_URL: http://localhost:8000
+      AI_SERVICE_API_KEY: no-usado
+      FLASK_APP: wsgi.py
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Crear los tres esquemas
+        run: |
+          for db in platform_core operations_db analytics_db; do
+            mysql -h 127.0.0.1 -uroot -pci-root -e "CREATE DATABASE $db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON $db.* TO 'platia'@'%';"
+          done
+      - run: flask db upgrade
+      - name: Los modelos y las migraciones coinciden
+        run: flask db check
+      - run: flask seed && flask seed
+      - run: flask db downgrade base
+      - run: flask db upgrade
+
   compose:
     runs-on: ubuntu-latest
     steps:
