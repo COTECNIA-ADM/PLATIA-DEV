@@ -1,0 +1,8 @@
+# Finales de línea LF en todo el repositorio, también al clonar en Windows.
+# Los scripts que ejecutan los contenedores Linux (p. ej. database/init/*.sh)
+# fallan con "bad interpreter" si llegan con CRLF.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
