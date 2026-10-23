@@ -3,6 +3,8 @@
 Reproducción de la Plataforma de *El Arquitecto y la Máquina*: automatización de
 operaciones B2B (oportunidades, análisis de documentos, propuestas) con IA.
 Se construye por fases; el plan está en `docs/plan-fases.md`.
+Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y los ADR de
+`docs/adr/`. Una decisión de arquitectura nueva se documenta con un ADR.
 
 ## Stack y arquitectura
 - **Backend**: Flask 3 + SQLAlchemy 2 (multi-bind) — `backend/`
