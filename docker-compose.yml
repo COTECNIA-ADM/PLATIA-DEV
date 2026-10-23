@@ -84,6 +84,19 @@ services:
   # ======================================================
   # CAPA DE APLICACIÓN: backend_net + data_net
   # ======================================================
+  # Tarea de un solo uso: aplica migraciones y datos iniciales y termina (fase 2)
+  migrations:
+    build: ./backend
+    environment:
+      <<: *backend-env
+      FLASK_APP: wsgi.py
+    command: ["sh", "-c", "flask db upgrade && flask seed"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+    networks: [data_net]
+
   backend:
     build: ./backend
     environment: *backend-env
@@ -92,6 +105,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"]
       interval: 15s
@@ -129,6 +144,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     mem_limit: 1g
     restart: unless-stopped
     networks: [backend_net, data_net]

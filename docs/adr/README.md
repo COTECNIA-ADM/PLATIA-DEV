@@ -13,3 +13,4 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [005](ADR-005-redes-minimo-privilegio.md) | Redes Docker con mínimo privilegio | Aceptado |
 | [006](ADR-006-crecimiento-incremental.md) | Empezar con 8 contenedores y crecer con motivos concretos | Aceptado |
 | [007](ADR-007-modelos-configurables.md) | Modelos y proveedores de LLM configurables | Aceptado |
+| [008](ADR-008-migraciones-multi-bind.md) | Modelos y migraciones en tres esquemas | Aceptado |
