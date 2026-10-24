@@ -156,6 +156,8 @@ class AuditAction:
     PII_DETECTED_IN_OUTPUT = "PII_DETECTED_IN_OUTPUT"
     GDPR_AI_EXPORT = "GDPR_AI_EXPORT"
     GDPR_AI_ERASURE = "GDPR_AI_ERASURE"
+    # Búsqueda (fase 5b)
+    SEARCH_CONFIG_CHANGED = "SEARCH_CONFIG_CHANGED"
 
 
 class AuditLog(db.Model):
@@ -392,3 +394,60 @@ class BudgetConfig(AuditMixin, db.Model):
     block_threshold_pct: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     throttle_delay_seconds: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+# ---------------------------------------------------------------- Búsqueda e intención (Cap. 13)
+class IntentPattern(AuditMixin, db.Model):
+    """Patrones de la primera capa del clasificador de intención. Se mantienen desde
+    Admin sin redesplegar; se escriben sobre el texto en minúsculas y sin tildes."""
+
+    __bind_key__ = BIND
+    __tablename__ = "intent_patterns"
+    __table_args__ = (Index("ix_intent_patterns_active_priority", "is_active", "priority"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    intent: Mapped[str] = mapped_column(String(20), nullable=False)  # CHAT_RAG, AGENT_TOOLS, WORKFLOW, OFF_TOPIC
+    subtype: Mapped[str] = mapped_column(String(50), default="", nullable=False)
+    pattern: Mapped[str] = mapped_column(String(300), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)  # menor = se evalúa antes
+    description: Mapped[str | None] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class SearchQueryLog(db.Model):
+    """Una fila por consulta del asistente y por búsqueda con texto (Capítulo 13).
+
+    Sirve para vigilar el clasificador: qué capa resolvió, con qué confianza y
+    cuánto tardó, si la persona reformuló enseguida, si abrió algún resultado y
+    si dijo que la intención no era esa. El texto se guarda con los datos
+    personales ocultos y se borra al cumplir la retención.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "search_query_log"
+    __table_args__ = (
+        Index("ix_search_query_log_created", "created_at"),
+        Index("ix_search_query_log_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)  # assistant, opportunities, documents
+    query_text: Mapped[str | None] = mapped_column(String(500))
+    query_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(20))
+    subtype: Mapped[str | None] = mapped_column(String(50))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    layer: Mapped[str | None] = mapped_column(String(10))  # pattern, llm, fallback
+    classify_ms: Mapped[int | None] = mapped_column(Integer)
+    total_ms: Mapped[int | None] = mapped_column(Integer)
+    engine: Mapped[str | None] = mapped_column(String(20))  # meilisearch, mysql, rag, none
+    filters: Mapped[dict | None] = mapped_column(JSON)
+    result_count: Mapped[int | None] = mapped_column(Integer)
+    usage_log_id: Mapped[int | None] = mapped_column(BigInteger)  # llm_usage_log de la capa 2
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    reformulated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), nullable=False)
+    first_click_at: Mapped[datetime | None] = mapped_column(DateTime)
+    click_position: Mapped[int | None] = mapped_column(Integer)
+    user_rating: Mapped[int | None] = mapped_column(Integer)
+    expected_intent: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)

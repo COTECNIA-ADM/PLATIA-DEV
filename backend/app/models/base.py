@@ -87,3 +87,7 @@ class VersionedMixin:
                            .execution_options(synchronize_session=False))
         for key, value in values.items():
             set_committed_value(self, key, value)
+        # Si el campo está en el buscador, se reindexa al confirmar (Capítulo 13)
+        from ..search.sync import mark_dirty
+
+        mark_dirty(db.session(), self, values.keys())

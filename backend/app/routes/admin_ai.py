@@ -25,7 +25,8 @@ from ..api.schemas import BaselineIn, BudgetIn, PricingIn, PromptPreviewIn, Prom
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..extensions import db
 from ..models import (AuditAction, AuditLog, BudgetConfig, Document, HumanBaselineConfig, LLMModelPricing,
-                      LLMQualityScore, LLMServiceConfig, LLMUsageLog, Prompt, TaskCompletionLog, User, utcnow)
+                      LLMQualityScore, LLMServiceConfig, LLMUsageLog, Prompt, SearchQueryLog, TaskCompletionLog, User,
+                      utcnow)
 from ..queue import PRIORITY_MAINTENANCE, enqueue
 from ..security.audit import audit
 from ..security.context import platform_guard, require_permission
@@ -470,6 +471,7 @@ def gdpr_export(user_id: int):
     usage = db.session.scalars(db.select(LLMUsageLog).filter_by(user_id=user_id).order_by(LLMUsageLog.id)).all()
     ratings = db.session.scalars(db.select(LLMQualityScore).filter_by(reviewer_type="user", reviewer_id=user_id)).all()
     tasks = db.session.scalars(db.select(TaskCompletionLog).filter_by(user_id=user_id)).all()
+    queries = db.session.scalars(db.select(SearchQueryLog).filter_by(user_id=user_id).order_by(SearchQueryLog.id)).all()
     audit(AuditAction.GDPR_AI_EXPORT, "INFO", user_id=g.security.user_id, resource_type="users", resource_id=user_id)
     return jsonify({
         "user_id": user_id, "generated_at": iso(utcnow()),
@@ -478,6 +480,8 @@ def gdpr_export(user_id: int):
                      "created_at": iso(r.created_at)} for r in ratings],
         "tasks": [{"service_type": t.service_type, "subject_type": t.subject_type, "subject_id": t.subject_id,
                    "created_at": iso(t.created_at)} for t in tasks],
+        "search_queries": [{"channel": q.channel, "query": q.query_text, "intent": q.intent, "rating": q.user_rating,
+                            "created_at": iso(q.created_at)} for q in queries],
     })
 
 
@@ -498,7 +502,11 @@ def gdpr_erase(user_id: int):
         .values(reviewer_id=None, notes=None)).rowcount
     tasks = db.session.execute(db.update(TaskCompletionLog).where(TaskCompletionLog.user_id == user_id)
                                .values(user_id=None)).rowcount
+    # Las consultas se conservan para las métricas del buscador, sin texto ni persona
+    queries = db.session.execute(db.update(SearchQueryLog).where(SearchQueryLog.user_id == user_id)
+                                 .values(user_id=None, query_text=None)).rowcount
     db.session.commit()
     audit(AuditAction.GDPR_AI_ERASURE, "WARNING", user_id=g.security.user_id, resource_type="users",
-          resource_id=user_id, details={"llm_calls": calls, "ratings": ratings, "tasks": tasks})
-    return jsonify({"user_id": user_id, "llm_calls": calls, "ratings": ratings, "tasks": tasks})
+          resource_id=user_id, details={"llm_calls": calls, "ratings": ratings, "tasks": tasks, "search_queries": queries})
+    return jsonify({"user_id": user_id, "llm_calls": calls, "ratings": ratings, "tasks": tasks,
+                    "search_queries": queries})

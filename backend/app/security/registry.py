@@ -28,6 +28,7 @@ MODULES: dict[str, set[str]] = {
     "audit": {"read"},
     "health": {"read"},
     "tasks": {"read", "write"},
+    "search": {"read", "write"},  # patrones del clasificador e índices (fase 5b)
     # --- security
     "guardrails": {"read"},
 }

@@ -11,7 +11,7 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - **Servicio IA**: FastAPI + SDK de Anthropic — `ai_service/` (solo lo llama el backend, con `X-API-Key`)
 - **Workers**: Celery con Redis como broker — `backend/celery_app.py`
 - **Frontal principal**: React 18 + TypeScript + Vite — `frontend/`
-- **Datos**: MySQL 8.0 con 3 esquemas (`platform_core`, `operations_db`, `analytics_db`), Redis, Qdrant
+- **Datos**: MySQL 8.0 con 3 esquemas (`platform_core`, `operations_db`, `analytics_db`), Redis, Qdrant, Meilisearch
 - **Proxy**: Nginx, único servicio con puerto publicado — `nginx/nginx.conf`
 - **Redes Docker**: `frontend_net`, `backend_net`, `data_net` (mínimo privilegio)
 
@@ -48,7 +48,11 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   exige `version` (`check_version`, 409 si no coincide).
 - Autorización por objeto: antes de modificar oportunidades, documentos o propuestas,
   `ensure_can_modify(módulo, obj)` (responsable o acción `manage`).
-- Rate limit por tipo: `RATE_LIMIT_READ`, `_WRITE`, `_UPLOAD`, `_EXPORT` o `_AI`.
+- Rate limit por tipo: `RATE_LIMIT_READ`, `_WRITE`, `_UPLOAD`, `_EXPORT`, `_SEARCH` o `_AI`.
+- Búsqueda (ADR-012): la sincronización MySQL → Meilisearch es automática; un modelo nuevo que
+  deba buscarse se registra en `app/search/indexes.py`. Los filtros se construyen con
+  `app/search/filters.py`, nunca concatenando texto. Los resultados se releen de MySQL y
+  los documentos se comprueban con `Viewer`.
 - Tareas Celery en `app/tasks/`, nombre `tasks.<dominio>.<acción>`, base `PlatformTask`,
   idempotentes. Se encolan con `enqueue(tarea, ...)`; la cola la decide el routing de
   `app/queue.py`. Una tarea programada nueva va en `BEAT_SCHEDULE`.
@@ -70,7 +74,7 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - No hardcodear IDs de tenant, API keys, contraseñas ni secretos.
 - No subir `.env` ni pegar secretos en issues, PRs o chats.
 - No hacer `ALTER TABLE` a mano.
-- No exponer `ai_service`, MySQL, Redis ni Qdrant fuera de las redes internas.
+- No exponer `ai_service`, MySQL, Redis, Qdrant ni Meilisearch fuera de las redes internas.
 - No hacer commit sin que pasen los tests y compile TypeScript.
 - No copiar texto del libro al repositorio: es contenido con copyright. Los fragmentos
   de código del repositorio machinebooks.ai son MIT y se pueden reutilizar citando su origen.

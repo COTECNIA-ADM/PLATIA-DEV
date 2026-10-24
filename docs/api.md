@@ -16,8 +16,9 @@ Todas las rutas cuelgan de `http://localhost:8080/api` y exigen sesión
 | Errores | `{"error": "mensaje", "type": "validation|conflict|business_rule|forbidden|not_found"}`; en validación, `fields` |
 | Borrado | Lógico (el registro deja de verse, no se destruye) |
 
-Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación 5 e IA 10
-(429 con `Retry-After`). Los errores de IA añaden los tipos `ai_unavailable` (503),
+Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación 5, búsqueda
+120 e IA 10 (429 con `Retry-After`). `search_unavailable` (503) aparece solo si el buscador
+no responde y el plan B en MySQL está desactivado. Los errores de IA añaden los tipos `ai_unavailable` (503),
 `ai_disabled` (503), `ai_rejected` (422), `guardrail` (422) y `budget_exceeded` (429).
 
 ## Recursos
@@ -38,6 +39,9 @@ Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación
 | IA en oportunidades | `POST/GET /opportunities/{id}/analysis`, `GET /opportunities/{id}/similar` (`only_open=true`) | `opportunities` |
 | IA en propuestas | `POST /proposals/{id}/generate` (`sections`, `instructions`) | `proposals.write` + `proposal_generator` |
 | IA (admin) | `/admin/ai/prompts` (+ `/{name}/versions`, `/{name}/versions/{v}/activate`, `/{name}/preview`), `/admin/ai/services[/{tipo}]`, `/admin/ai/pricing`, `/admin/ai/budgets[/{id}]`, `/admin/ai/usage`, `/admin/ai/usage/summary`, `/admin/ai/roi`, `/admin/ai/baselines[/{tipo}]`, `/admin/ai/quality`, `/admin/ai/rag/collections`, `POST /admin/ai/rag/reindex`, `/admin/ai/health`, `/admin/ai/compliance`, `GET /admin/ai/gdpr/users/{id}`, `POST /admin/ai/gdpr/users/{id}/erase` | `prompts`, `llm_config`, `audit`, `users` |
+| Búsqueda | `GET /search?q=&limit=` (oportunidades, documentos y clientes a la vez), `POST /search/opportunities`, `POST /search/documents`, `POST /search/click` (`query_log_id`, `kind`, `object_id`, `position`) | `opportunities.read` / `documents.read` |
+| Asistente | `POST /assistant/query` (`query` máx. 500, `history`, `document_ids`, `opportunity_id`), `POST /assistant/feedback` (`query_log_id`, `rating` 1-5, `expected_intent`) | `opportunities.read` + `copilot_chat` |
+| Búsqueda (admin) | `GET/POST /admin/search/intent-patterns`, `PATCH/DELETE /admin/search/intent-patterns/{id}`, `POST /admin/search/intent/test`, `GET /admin/search/quality?days=`, `GET /admin/search/indexes`, `POST /admin/search/reindex` (`index`) | `search` |
 | Colas (admin) | `GET /admin/tasks/queues`, `GET /admin/tasks/failed`, `POST /admin/tasks/failed/{id}/review`, `POST /admin/tasks/failed/{id}/retry` | `tasks` |
 
 ## Flujos
@@ -75,6 +79,30 @@ para el resto no existe (404), tampoco en las búsquedas ni en las respuestas de
   mano (`edited_content`) no se toca, salvo que pidas esa sección en `sections`.
 - Módulos de IA por rol (`ai_modules_access`): el analista tiene `document_analyzer` y
   `copilot_chat`; el gestor, todos; el de consulta, ninguno.
+
+**Búsqueda** (decisiones en [ADR-012](adr/ADR-012-busqueda-e-intencion.md)):
+- `POST /search/opportunities` admite `q`, `status`, `phase`, `sector`, `service_line`,
+  `source`, `cpv` (prefijos: `["72"]`), `value_min/max`, `deadline_from/to`,
+  `deadline_within_days`, `published_from/to`, `published_within_days`, `min_relevance`,
+  `owner` (`"me"` o id), `client_id`, `only_open`, `sort` (`relevance`, `-relevance_score`,
+  `deadline`, `-published`, `-value`, `value`, `-created`), `facets` y `semantic` (reordena
+  la primera página por significado). Cada resultado trae `highlight.title` y
+  `highlight.snippet` con `<mark>` (el resto del texto va escapado) y `score`.
+- La respuesta dice el motor (`engine`: `meilisearch` o `mysql` si el buscador no
+  responde; entonces sin facetas y con un aviso en `notes`). Con `q` incluye
+  `query_log_id` para registrar el clic.
+- Los documentos se filtran por los mismos permisos que en el resto de la API.
+
+**Asistente**: `POST /assistant/query` clasifica la frase y responde siempre con
+`intent` (`type`, `subtype`, `confidence`, `layer`: `pattern`, `llm` o `fallback`) y
+`query_log_id`, más según el `type`:
+- `search_results`: `target` (`opportunities`, `documents`, `clients`), `filters` que se
+  entendieron de la frase, `items` y `pagination`.
+- `rag_answer`: como `POST /ai/ask`.
+- `workflow_suggestion`: `action`, `target`, `message` y `confirm` (`method`, `path`,
+  `body`) para que la interfaz lo lance si la persona confirma. **Nunca se ejecuta solo.**
+  `confirm` es `null` si falta el destino o el rol no lo permite.
+- `off_topic`: `message` orientativo.
 
 ## Quién puede qué (operations)
 

@@ -35,6 +35,7 @@ def create_app(config: object | None = None) -> Flask:
     register_error_handlers(app)
 
     from . import models  # noqa: F401  (registra las tablas para Alembic)
+    from .search import sync as _search_sync  # noqa: F401  (escucha los cambios para el buscador)
     from .cli import register_cli
 
     register_cli(app)
@@ -58,6 +59,7 @@ def create_app(config: object | None = None) -> Flask:
 
     from .routes.admin import admin_bp
     from .routes.admin_ai import admin_ai_bp
+    from .routes.admin_search import admin_search_bp
     from .routes.ai import ai_bp
     from .routes.admin_tasks import admin_tasks_bp
     from .routes.auth import auth_bp
@@ -68,10 +70,12 @@ def create_app(config: object | None = None) -> Flask:
     from .routes.inbox import inbox_bp
     from .routes.opportunities import opportunities_bp
     from .routes.proposals import proposals_bp
+    from .routes.search import search_bp
     from .routes.talent import talent_bp
 
     for bp in (health_bp, auth_bp, admin_bp, admin_tasks_bp, clients_bp, opportunities_bp,
-               documents_bp, proposals_bp, catalog_bp, talent_bp, inbox_bp, ai_bp, admin_ai_bp):
+               documents_bp, proposals_bp, catalog_bp, talent_bp, inbox_bp, ai_bp, admin_ai_bp, search_bp,
+               admin_search_bp):
         app.register_blueprint(bp)
 
     init_celery(app)

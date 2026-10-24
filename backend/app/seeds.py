@@ -11,8 +11,8 @@ from pathlib import Path
 import structlog
 
 from .extensions import db
-from .models import (App, AppRole, BudgetConfig, HumanBaselineConfig, LLMModelPricing, LLMServiceConfig, Prompt,
-                     ProposalTemplate, ServiceLine)
+from .models import (App, AppRole, BudgetConfig, HumanBaselineConfig, IntentPattern, LLMModelPricing,
+                     LLMServiceConfig, Prompt, ProposalTemplate, ServiceLine)
 
 log = structlog.get_logger(__name__)
 
@@ -61,11 +61,11 @@ ROLES = {
         "superadmin": ("Superadministrador", True, {}),
         "admin": ("Administrador", False, {
             "users": RW, "roles": RW, "llm_config": RW, "prompts": RW, "audit": R, "health": R,
-            "tasks": RW,
+            "tasks": RW, "search": RW,
         }),
         "auditor": ("Auditor", False, {
             "users": R, "roles": R, "llm_config": R, "prompts": R, "audit": R, "health": R,
-            "tasks": R,
+            "tasks": R, "search": R,
         }),
     },
     "security": {
@@ -74,6 +74,61 @@ ROLES = {
         "viewer": ("Consulta", False, {"audit": R, "alerts": R}),
     },
 }
+
+# Módulos de permiso que llegaron en fases posteriores: se añaden a los roles de
+# serie que ya existían en la BD (solo si el rol no tiene ese módulo; no se
+# tocan los permisos que un administrador haya cambiado).
+LATER_MODULES = {"search"}
+
+# Patrones de la primera capa del clasificador (Capítulo 13). Redacción propia.
+# Se aplican sobre el texto en minúsculas y sin tildes. Editables desde Admin.
+_SEARCH_NOUNS = r"(oportunidad|oportunidades|contrato|contratos|licitacion|licitaciones|concurso|concursos|expediente|expedientes)"
+INTENT_PATTERNS = [
+    # intención, subtipo, prioridad, patrón, descripción
+    ("OFF_TOPIC", "", 10, r"\b(tiempo|clima|lluvia|temperatura)\b.{0,30}\b(hoy|manana|hace|hara|fin de semana)\b",
+     "El tiempo"),
+    ("OFF_TOPIC", "", 10, r"\b(futbol|liga|partido|deportes?|pelicula|series?|receta|chiste|horoscopo|loteria)\b",
+     "Ocio y temas generales"),
+    ("OFF_TOPIC", "", 10, r"^(hola|buenas|buenos dias|buenas tardes|gracias|adios|hasta luego)[\s!.,]*$",
+     "Saludos sin petición"),
+    ("WORKFLOW", "generate_proposal", 20,
+     r"\b(genera|generame|crea|creame|elabora|redacta|redactame|prepara|preparame|escribe|escribeme)\b.{0,60}\b(propuesta|oferta|memoria tecnica|borrador)\b",
+     "Redactar una propuesta"),
+    ("WORKFLOW", "analyze_opportunity", 20,
+     r"\b(nos conviene|merece la pena|deberiamos presentarnos|nos presentamos|encaja con nuestro|go.?no.?go)\b",
+     "Decidir si presentarse"),
+    ("WORKFLOW", "analyze_opportunity", 25,
+     r"\b(analiza|evalua|valora|estudia)\b.{0,40}\b(esta|este|la|el)\b.{0,20}\b(oportunidad|licitacion|concurso|expediente)\b",
+     "Analizar una oportunidad concreta"),
+    ("WORKFLOW", "analyze_document", 25, r"\b(analiza|revisa|evalua)\b.{0,40}\b(este|el|ese)\b.{0,15}\b(pliego|documento)\b",
+     "Analizar un documento concreto"),
+    ("WORKFLOW", "summarize", 30, r"\b(resumen ejecutivo|informe ejecutivo)\b", "Resumen ejecutivo"),
+    ("AGENT_TOOLS", "search_opportunities", 40,
+     r"\b(busca|buscame|encuentra|encuentrame|muestra|muestrame|lista|listame|dame|ensename|filtra|hay)\b.{0,50}\b" + _SEARCH_NOUNS + r"\b",
+     "Orden de buscar + oportunidades"),
+    ("AGENT_TOOLS", "search_opportunities", 40,
+     r"\b" + _SEARCH_NOUNS + r"\b.{0,50}\b(presupuesto|importe|valor|plazo|publicad|abiert|vigente|cpv|cierr|venc|mas de|menos de|entre)",
+     "Oportunidades + atributo filtrable"),
+    ("AGENT_TOOLS", "search_opportunities", 45,
+     r"\b(mas de|menos de|superior(es)? a|inferior(es)? a|entre|hasta)\s+[\d.,]+\s*(k|mil|millones?|euros|eur|€)",
+     "Importe con cifra"),
+    ("AGENT_TOOLS", "search_opportunities", 45, r"\bcpv\b|\b\d{8}(-\d)?\b", "Código CPV"),
+    ("AGENT_TOOLS", "search_opportunities", 45,
+     r"\b(publicad[oa]s|que (cierran|vencen|caducan)|fecha limite)\b", "Fechas de publicación o plazo"),
+    ("AGENT_TOOLS", "search_documents", 50,
+     r"\b(busca|encuentra|localiza|donde esta|donde estan)\b.{0,40}\b(documento|documentos|pliego|pliegos|fichero|archivo|anexo)\b",
+     "Localizar un documento"),
+    ("AGENT_TOOLS", "search_clients", 50,
+     r"\b(busca|encuentra|localiza|datos de|ficha de)\b.{0,30}\b(cliente|clientes|empresa)\b", "Localizar un cliente"),
+    ("CHAT_RAG", "rag_query", 60,
+     r"\b(explica|explicame|que dice|que establece|que exige|que requisitos|cuales son|cual es|por que|resume|resumeme|compara|diferencias?)\b",
+     "Pregunta o explicación"),
+    ("CHAT_RAG", "rag_query", 60, r"\b(segun|en el|del|de la)\s+(pliego|documento|contrato|propuesta|acta)\b",
+     "Referencia a un documento"),
+    ("CHAT_RAG", "rag_query", 60,
+     r"\b(hemos (ganado|presentado|hecho|trabajado|perdido)|nuestr[oa]s? (propuestas?|experiencia|proyectos?|clientes)|historico|casos similares|antecedentes|que hicimos)\b",
+     "Experiencia propia"),
+]
 
 # Portfolio de partida para puntuar oportunidades (Capítulo 9). Editable desde la API.
 # Prefijos CPV de la UE: 72 servicios TI, 48 paquetes de software, 79411 consultoría de gestión.
@@ -133,6 +188,8 @@ LLM_SERVICES = [
      "Reescritura de preguntas para la búsqueda"),
     ("rag_evaluation", "claude-haiku-5-5", "claude-sonnet-5-5", 3000, "low", "rag.evaluate",
      "Evaluación automática de una muestra de respuestas"),
+    ("intent_classification", "claude-haiku-5-5", "claude-sonnet-5-5", 1000, "low", "intent.classify",
+     "Segunda capa del clasificador de intención del asistente"),
 ]
 
 # USD por millón de tokens (precio estándar publicado por Anthropic en la fecha
@@ -168,7 +225,7 @@ PROMPT_SEEDS_DIR = Path(__file__).parent / "prompt_seeds"
 
 def run_seeds() -> dict[str, int]:
     created = {"apps": 0, "roles": 0, "llm_services": 0, "llm_pricing": 0, "service_lines": 0,
-               "proposal_templates": 0, "prompts": 0, "budgets": 0, "human_baselines": 0}
+               "proposal_templates": 0, "prompts": 0, "budgets": 0, "human_baselines": 0, "intent_patterns": 0}
 
     apps = {a.code: a for a in db.session.scalars(db.select(App))}
     for code, name, description in APPS:
@@ -186,6 +243,8 @@ def run_seeds() -> dict[str, int]:
                 db.session.add(AppRole(app_id=app.id, code=code, name=name, is_admin=is_admin,
                                        permissions=permissions))
                 created["roles"] += 1
+            else:
+                _add_later_modules(app.id, code, permissions)
 
     for service_type, model, fallback, max_tokens, effort, prompt_name, description in LLM_SERVICES:
         config = db.session.get(LLMServiceConfig, service_type)
@@ -229,6 +288,7 @@ def run_seeds() -> dict[str, int]:
             price.cache_read_usd_per_mtok, price.cache_write_usd_per_mtok = cache_read, cache_write
 
     created["prompts"] = _seed_prompts()
+    created["intent_patterns"] = _seed_intent_patterns()
 
     for scope, scope_id, daily, monthly in BUDGETS:
         if db.session.scalar(db.select(BudgetConfig.id).filter_by(scope=scope, scope_id=scope_id)) is None:
@@ -259,6 +319,25 @@ def run_seeds() -> dict[str, int]:
 
     db.session.commit()
     log.info("seeds_applied", **created)
+    return created
+
+
+def _add_later_modules(app_id: int, code: str, permissions: dict) -> None:
+    role = db.session.scalar(db.select(AppRole).filter_by(app_id=app_id, code=code))
+    current = dict(role.permissions or {})
+    missing = {m: a for m, a in permissions.items() if m in LATER_MODULES and m not in current}
+    if missing:
+        role.permissions = {**current, **missing}
+
+
+def _seed_intent_patterns() -> int:
+    existing = {(p.intent, p.pattern) for p in db.session.scalars(db.select(IntentPattern))}
+    created = 0
+    for intent, subtype, priority, pattern, description in INTENT_PATTERNS:
+        if (intent, pattern) not in existing:
+            db.session.add(IntentPattern(intent=intent, subtype=subtype, priority=priority, pattern=pattern,
+                                         description=description))
+            created += 1
     return created
 
 

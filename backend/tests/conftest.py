@@ -10,6 +10,7 @@ from app.security.passwords import hash_password
 from app.seeds import run_seeds
 
 from fake_ai import FakeAIClient
+from fake_meili import FakeMeili
 
 PASSWORD = "Contrasena-Segura-123"
 
@@ -21,6 +22,7 @@ def app():
     app = create_app(TestConfig())
     app.extensions["redis"] = fakeredis.FakeRedis()
     app.extensions["ai_client"] = FakeAIClient()  # sin red ni coste
+    app.extensions["search_client"] = FakeMeili()  # Meilisearch en memoria
     with app.app_context():
         db.create_all()
         yield app
@@ -31,6 +33,11 @@ def app():
 @pytest.fixture()
 def ai(app) -> FakeAIClient:
     return app.extensions["ai_client"]
+
+
+@pytest.fixture()
+def meili(app) -> FakeMeili:
+    return app.extensions["search_client"]
 
 
 @pytest.fixture()
