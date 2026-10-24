@@ -146,7 +146,7 @@ def _check_preconditions(proposal: Proposal, target: str) -> None:
         raise BusinessRuleError("Indica el importe total antes de enviar la propuesta.")
 
 
-def _sync_opportunity(proposal: Proposal, comment: str | None) -> str | None:
+def _sync_opportunity(proposal: Proposal, comment: str | None, actor_id: int | None = None) -> str | None:
     target = OPPORTUNITY_SYNC.get(proposal.status)
     opp: Opportunity = proposal.opportunity
     if target is None or opp is None or opp.status == target:
@@ -155,11 +155,12 @@ def _sync_opportunity(proposal: Proposal, comment: str | None) -> str | None:
         log.info("opportunity_sync_skipped", opportunity_id=opp.id, status=opp.status, target=target)
         return None
     reason = comment or f"Propuesta {proposal.id}: {proposal.status}"
-    opp_service.change_status(opp, target, reason)
+    opp_service.change_status(opp, target, reason, actor_id)
     return target
 
 
-def change_status(proposal: Proposal, target: str, can_send: bool, comment: str | None = None) -> dict:
+def change_status(proposal: Proposal, target: str, can_send: bool, comment: str | None = None,
+                  actor_id: int | None = None) -> dict:
     """Cambia el estado validando el grafo y las reglas del tipo. No hace commit."""
     if target == "approved":
         raise BusinessRuleError("Para aprobar una propuesta, registra las revisiones en /reviews.")
@@ -180,7 +181,7 @@ def change_status(proposal: Proposal, target: str, can_send: bool, comment: str 
         proposal.review_round += 1
     if target == "sent":
         proposal.sent_at = utcnow()
-    synced = _sync_opportunity(proposal, comment)
+    synced = _sync_opportunity(proposal, comment, actor_id)
     return {"from": previous, "to": target, "opportunity_status": synced}
 
 

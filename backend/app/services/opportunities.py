@@ -16,7 +16,7 @@ import structlog
 
 from ..errors import BusinessRuleError
 from ..extensions import db
-from ..models import Opportunity, ServiceLine, utcnow
+from ..models import Opportunity, OpportunityStatusChange, ServiceLine, utcnow
 
 log = structlog.get_logger(__name__)
 
@@ -43,8 +43,17 @@ def allowed_transitions(status: str) -> list[str]:
     return sorted(TRANSITIONS.get(status, set()))
 
 
-def change_status(opp: Opportunity, target: str, comment: str | None = None) -> str:
-    """Valida y aplica la transición. Devuelve el estado anterior. No hace commit."""
+def record_status(opp: Opportunity, previous: str | None, actor_id: int | None = None,
+                  comment: str | None = None) -> None:
+    """Apunta el cambio en el historial (de ahí salen el embudo y las fechas de cierre)."""
+    # El estado inicial se rellena al insertar: aquí puede no estar aún
+    db.session.add(OpportunityStatusChange(opportunity=opp, from_status=previous, to_status=opp.status or "detected",
+                                           comment=(comment or None) and comment[:500], created_by=actor_id))
+
+
+def change_status(opp: Opportunity, target: str, comment: str | None = None, actor_id: int | None = None) -> str:
+    """Valida y aplica la transición y la apunta en el historial. Devuelve el estado
+    anterior. No hace commit."""
     if target not in Opportunity.STATUSES:
         raise BusinessRuleError(f"Estado desconocido: {target}.")
     if target not in TRANSITIONS.get(opp.status, set()):
@@ -60,6 +69,7 @@ def change_status(opp: Opportunity, target: str, comment: str | None = None) -> 
         opp.probability = 100
     elif target in ("lost", "discarded"):
         opp.probability = 0
+    record_status(opp, previous, actor_id, comment)
     return previous
 
 
@@ -210,6 +220,7 @@ def upsert_from_feed(item: dict, source: str) -> tuple[Opportunity | None, str]:
         return existing, "updated"
     opp = Opportunity(source=source, external_id=external_id, status="detected", **values)
     db.session.add(opp)
+    record_status(opp, None)
     return opp, "created"
 
 

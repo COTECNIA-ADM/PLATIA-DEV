@@ -3,7 +3,7 @@
 // Ocultar un botón es solo comodidad: el backend vuelve a comprobarlo todo.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, refreshSession, setAccessToken } from './api'
+import { ApiError, api, refreshSession, setAccessToken } from './api'
 import type { ActiveApp, User } from './types'
 
 type Me = { user: User; active_app: ActiveApp }
@@ -13,6 +13,8 @@ type AuthState = {
   app: ActiveApp | null
   loading: boolean
   expired: boolean
+  /** Sesión válida, pero sin rol en esta aplicación */
+  denied: boolean
   /** ¿El rol permite esta acción en este módulo? */
   can: (module: string, action: string) => boolean
   /** ¿El rol tiene este módulo de IA (ai_modules_access)? */
@@ -31,9 +33,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
   const [expired, setExpired] = useState(false)
+  const [denied, setDenied] = useState(false)
 
   const reload = useCallback(async () => {
-    setMe(await api<Me>('/api/auth/me'))
+    try {
+      setMe(await api<Me>('/api/auth/me'))
+      setDenied(false)
+    } catch (err) {
+      // 403: la sesión es buena, pero esta persona no tiene rol en esta aplicación
+      if (!(err instanceof ApiError && err.status === 403)) throw err
+      setMe(null)
+      setDenied(true)
+    }
   }, [])
 
   // Al abrir la página se intenta recuperar la sesión con la cookie de refresco
@@ -68,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     setAccessToken(null)
     setMe(null)
+    setDenied(false)
     queryClient.clear()
   }, [queryClient])
 
@@ -80,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       app,
       loading,
       expired,
+      denied,
       can,
       hasAI: (module) => !!app && (app.is_admin || (app.permissions.ai_modules_access ?? []).includes(module)),
       canModify: (module, ownerId) => can(module, 'manage') || (!!me && ownerId === me.user.id),
@@ -87,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reload,
       logout,
     }
-  }, [me, loading, expired, signedIn, reload, logout])
+  }, [me, loading, expired, denied, signedIn, reload, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

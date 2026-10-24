@@ -39,6 +39,7 @@ from .operations import (
     Notification,
     Opportunity,
     OpportunityDocument,
+    OpportunityStatusChange,
     Project,
     Proposal,
     ProposalAttachment,

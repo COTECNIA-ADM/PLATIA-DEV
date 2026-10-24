@@ -553,3 +553,21 @@ class AgentToolsIn(Schema):
 class AgentTestIn(Schema):
     input: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     expect_tools: list[ToolName] = Field(default_factory=list, max_length=12)
+
+
+# ---------------------------------------------------------------- Usuarios y roles (fase 6b)
+class UserCreateIn(Schema):
+    email: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=255,
+                                            pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=256)]
+
+
+class UserMembershipIn(Schema):
+    role: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+
+
+class RolePermissionsIn(Schema):
+    version: int = Field(ge=1)
+    permissions: dict[Annotated[str, StringConstraints(max_length=50)],
+                      list[Annotated[str, StringConstraints(max_length=50)]]] = Field(max_length=40)

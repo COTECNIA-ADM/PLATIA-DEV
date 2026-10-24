@@ -76,7 +76,11 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Campos que escriben las tareas en segundo plano (indexado, IA): `obj.set_system_fields(...)`,
   que no cambia `row_version`.
 
-## Frontal (`frontend/`, ADR-014)
+## Frontal (`frontend/`, ADR-014 y ADR-015)
+- Tres aplicaciones en un solo build: operaciones (`src/`), analítica (`src/analytics/`) y
+  administración (`src/admin/`). Cada una arranca con `mount(código, <App/>)`, que fija su
+  `X-App-Code`; el menú va en `Shell` y el control de acceso en `AccessGate`.
+- Gráficos con `src/components/charts.tsx` (colores `--series-*` y `--seq-*`), siempre con vista de tabla.
 - Llamadas a la API solo con `src/lib/api.ts` (`api`, `download`, `stream`); datos con React Query.
 - El token de acceso vive en memoria: nunca `localStorage` ni `sessionStorage`.
 - Permisos con `useAuth()` (`can`, `hasAI`, `canModify`), que salen de `/api/auth/me`.

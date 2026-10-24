@@ -64,7 +64,8 @@ def test_admin_creates_user_assigns_role_and_deactivates(client, make_user, logi
     bad_role = client.put(f"/api/admin/users/{uid}/memberships/operations", headers=admin, json={"role": "jefe"})
     assert bad_role.status_code == 400
     ok = client.put(f"/api/admin/users/{uid}/memberships/operations", headers=admin, json={"role": "analyst"})
-    assert ok.json["user"]["memberships"] == [{"app": "operations", "role": "analyst", "is_active": True}]
+    assert ok.json["user"]["memberships"] == [{"app": "operations", "role": "analyst", "role_name": "Analista",
+                                               "is_active": True}]
 
     user_headers = login("nuevo@example.com")
     assert client.get("/api/auth/me", headers=user_headers).json["active_app"]["role"] == "analyst"

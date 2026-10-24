@@ -156,7 +156,7 @@ def change_status(proposal_id: int):
     data = parse_body(StatusChange)
     check_version(proposal, data.version)
     result = service.change_status(proposal, data.status, g.security.can("proposals", "send"),
-                                   data.comment)
+                                   data.comment, g.security.user_id)
     db.session.commit()
     audit(AuditAction.PROPOSAL_STATUS_CHANGED, user_id=g.security.user_id, resource_type="proposals",
           resource_id=proposal.id, details={**result, "comment": data.comment,

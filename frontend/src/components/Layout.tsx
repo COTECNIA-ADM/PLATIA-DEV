@@ -1,15 +1,15 @@
-// Estructura de la aplicación: barra lateral, barra superior con el buscador global y
-// la campana de avisos, y el contenido de cada página.
+// Estructura de la aplicación de operaciones: el armazón común (Shell) con el buscador
+// global y la campana de avisos en la barra superior.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { NavLink, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { QuickSearch } from '../lib/types'
 import { Highlight } from './text'
+import Shell, { type NavItem } from './Shell'
 import { useDebounced } from './ui'
 
-type NavItem = { to: string; label: string; icon: string; module?: string; ai?: string }
 
 const NAV: NavItem[] = [
   { to: '/', label: 'Inicio', icon: '⌂' },
@@ -121,63 +121,15 @@ function Bell() {
 }
 
 export default function Layout() {
-  const { user, can, hasAI, logout } = useAuth()
-  const location = useLocation()
-  const [menuOpen, setMenuOpen] = useState(false)
-  useEffect(() => setMenuOpen(false), [location.pathname])
-
-  const items = NAV.filter((n) => (!n.module || can(n.module, 'read')) && (!n.ai || hasAI(n.ai)))
-  const initials = (user?.full_name ?? '?')
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-
   return (
-    <div className={`shell${menuOpen ? ' shell-menu-open' : ''}`}>
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">P</span>
-          <span>PLATIA</span>
-        </div>
-        <nav>
-          {items.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'} className="nav-link">
-              <span className="nav-icon" aria-hidden>
-                {n.icon}
-              </span>
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="sidebar-foot">
-          <NavLink to="/account" className="nav-link">
-            <span className="avatar" aria-hidden>
-              {initials}
-            </span>
-            <span className="sidebar-user">
-              {user?.full_name}
-              <small>Mi cuenta</small>
-            </span>
-          </NavLink>
-          <button className="btn btn-ghost btn-small" onClick={() => void logout()}>
-            Cerrar sesión
-          </button>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <button className="btn-icon menu-toggle" onClick={() => setMenuOpen((o) => !o)} aria-label="Menú">
-            ☰
-          </button>
+    <Shell
+      nav={NAV}
+      topbar={
+        <>
           <QuickSearchBox />
           <Bell />
-        </header>
-        <main className="content">
-          <Outlet />
-        </main>
-      </div>
-    </div>
+        </>
+      }
+    />
   )
 }

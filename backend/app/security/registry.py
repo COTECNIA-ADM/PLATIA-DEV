@@ -35,6 +35,16 @@ MODULES: dict[str, set[str]] = {
     "guardrails": {"read"},
 }
 
+# Módulos que tienen sentido en cada aplicación (para el editor de roles de Admin).
+# Un módulo puede estar en varias: los permisos se guardan por rol y cada rol es de una app.
+APP_MODULES: dict[str, tuple[str, ...]] = {
+    "operations": ("clients", "opportunities", "documents", "proposals", "templates", "portfolio", "talent",
+                   "alerts", "notifications", "copilot", "reports"),
+    "analytics": ("dashboards", "reports", "copilot"),
+    "admin": ("users", "roles", "llm_config", "prompts", "audit", "health", "tasks", "search", "agents"),
+    "security": ("audit", "alerts", "guardrails"),
+}
+
 # Clave especial: lista de módulos de IA, no acciones (Capítulo 6)
 AI_MODULES = {"document_analyzer", "proposal_generator", "cv_analyzer", "copilot_chat"}
 

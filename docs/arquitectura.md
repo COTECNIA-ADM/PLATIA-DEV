@@ -88,5 +88,5 @@ pedir aprobación antes de cambiar nada (ADR-013).
 | `celery_beat` | Fase 4 (hecho) | Tareas periódicas: limpieza RGPD, escaneo de datos personales, alertas |
 | Workers por cola (`celery_default`, `celery_ai`) | Fase 4 (hecho) | Las tareas de IA no deben competir con las de documentos |
 | `meilisearch` | Fase 5b (hecho) | Búsqueda textual rápida de oportunidades y documentos |
-| `analytics_frontend`, `admin_frontend` | Fase 6 | Audiencias y despliegues distintos |
+| ~~`analytics_frontend`, `admin_frontend`~~ | Fase 6 | Finalmente son dos entradas más del contenedor `frontend` (ADR-015) |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |
