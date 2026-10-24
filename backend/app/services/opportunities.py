@@ -1,11 +1,14 @@
 """Motor de oportunidades (Capítulo 9).
 
 - Máquina de estados de las 12 fases del embudo.
-- Puntuación de relevancia (0-10) contra las líneas de servicio del portfolio.
+- Puntuación de relevancia (0-10) contra las líneas de servicio del portfolio:
+  similitud semántica con embeddings (fase 5) combinada con palabras clave. Si
+  el servicio de IA no responde, se puntúa solo con palabras clave.
 - Ingesta de feeds ATOM públicos con deduplicación por hash.
 """
 import hashlib
 import re
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -62,6 +65,8 @@ def change_status(opp: Opportunity, target: str, comment: str | None = None) -> 
 
 # ------------------------------------------------------------------ Relevancia
 WEIGHT_TEXT, WEIGHT_TAXONOMY, WEIGHT_WIN_RATE = 0.5, 0.3, 0.2
+# Dentro del componente de texto: semántica 70 %, palabras clave 30 %
+WEIGHT_SEMANTIC = 0.7
 KEYWORDS_FOR_FULL_SCORE = 3
 MIN_CLOSED_FOR_WIN_RATE = 3
 
@@ -74,8 +79,7 @@ def _normalize(text: str) -> str:
 
 
 def keyword_score(text: str, keywords: list[str]) -> float:
-    """0-10 según cuántas palabras clave de la línea aparecen (palabra completa).
-    Sustituye a la similitud semántica hasta la fase 5 (Qdrant)."""
+    """0-10 según cuántas palabras clave de la línea aparecen (palabra completa)."""
     if not keywords:
         return 0.0
     haystack = _normalize(text)
@@ -106,9 +110,41 @@ def historical_win_rate(service_line: str) -> float:
     return counts.get("won", 0) / closed
 
 
-def score_against(opp: Opportunity, line: ServiceLine) -> dict:
+def line_profile(line: ServiceLine) -> str:
+    """Texto con el que se compara cada oportunidad en la puntuación semántica."""
+    return f"{line.name}. {line.description or ''} {', '.join(line.keywords or [])}".strip()
+
+
+_semantic_down_until = 0.0
+
+
+def semantic_scores(opp: Opportunity, lines: list[ServiceLine]) -> dict[str, float] | None:
+    """Similitud 0-10 con cada línea, o None si la IA no está disponible."""
+    from flask import current_app
+
+    global _semantic_down_until
+    cfg = current_app.config
+    if not cfg.get("SEMANTIC_SCORING", True) or not lines or time.monotonic() < _semantic_down_until:
+        return None
+    from ..ai.client import AIServiceError, get_ai_client
+
+    try:
+        sims = get_ai_client().similarity([f"{opp.title}. {(opp.description or '')[:3000]}"],
+                                          [line_profile(line) for line in lines])[0]
+    except (AIServiceError, KeyError, IndexError) as exc:
+        # Sin IA no se espera en cada oportunidad de un feed: se reintenta en un minuto
+        log.info("semantic_scoring_unavailable", error=str(exc))
+        _semantic_down_until = time.monotonic() + 60
+        return None
+    low, high = cfg.get("SEMANTIC_SIM_LOW", 0.15), cfg.get("SEMANTIC_SIM_HIGH", 0.65)
+    return {line.code: round(max(0.0, min(1.0, (sim - low) / (high - low))) * 10, 2)
+            for line, sim in zip(lines, sims)}
+
+
+def score_against(opp: Opportunity, line: ServiceLine, semantic: float | None = None) -> dict:
     """Puntuación 0-10: texto 50 %, taxonomía CPV 30 %, histórico de éxito 20 % (Capítulo 9)."""
-    text_score = keyword_score(f"{opp.title} {opp.description or ''}", line.keywords or [])
+    keywords = keyword_score(f"{opp.title} {opp.description or ''}", line.keywords or [])
+    text_score = keywords if semantic is None else WEIGHT_SEMANTIC * semantic + (1 - WEIGHT_SEMANTIC) * keywords
     taxonomy = taxonomy_match(opp.cpv_codes, line.cpv_prefixes or [])
     win_rate = historical_win_rate(line.code)
     total = text_score * WEIGHT_TEXT + taxonomy * 10 * WEIGHT_TAXONOMY + win_rate * 10 * WEIGHT_WIN_RATE
@@ -116,6 +152,8 @@ def score_against(opp: Opportunity, line: ServiceLine) -> dict:
         "service_line": line.code,
         "score": round(min(total, 10.0), 2),
         "text": round(text_score, 2),
+        "keywords": round(keywords, 2),
+        "semantic": semantic,
         "taxonomy": taxonomy,
         "win_rate": round(win_rate, 2),
     }
@@ -127,7 +165,8 @@ def score_opportunity(opp: Opportunity, lines: list[ServiceLine] | None = None) 
         lines = list(db.session.scalars(ServiceLine.select_active()))
     if not lines:
         return None
-    best = max((score_against(opp, line) for line in lines), key=lambda r: r["score"])
+    semantic = semantic_scores(opp, lines) or {}
+    best = max((score_against(opp, line, semantic.get(line.code)) for line in lines), key=lambda r: r["score"])
     opp.relevance_score = Decimal(str(best["score"]))
     opp.scored_at = utcnow()
     if not opp.service_line:

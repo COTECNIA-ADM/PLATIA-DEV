@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from ..models import CVProfile, Opportunity, OpportunityDocument, Proposal, ProposalReview
 
@@ -116,9 +116,14 @@ class LinkDocument(Schema):
 
 
 # ---------------------------------------------------------------- Documentos
+RoleCode = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z_]{2,30}$")]
+
+
 class DocumentPatch(Versioned):
     title: Str500 | None = None
     doc_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] | None = None
+    # Roles de operaciones que pueden ver el documento; null o [] = cualquiera con documents.read
+    allowed_roles: list[RoleCode] | None = Field(default=None, max_length=10)
 
 
 # ---------------------------------------------------------------- Propuestas
@@ -249,3 +254,106 @@ class CVProfilePatch(CVProfileIn, Versioned):
     is_available: bool | None = None
     skills: list[SkillIn] | None = Field(default=None, max_length=100)
     experiences: list[ExperienceIn] | None = Field(default=None, max_length=50)
+
+
+# ---------------------------------------------------------------- IA (fase 5)
+Question = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
+PromptText = Annotated[str, StringConstraints(min_length=1, max_length=50000)]
+ModelName = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9._:/\-]{1,100}$")]
+PromptName = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z0-9_]+(\.[a-z0-9_]+)+$",
+                                              max_length=100)]
+Provider = Literal["anthropic", "openai_compatible"]
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+Usd = Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=4)]
+
+
+class ChatTurn(Schema):
+    role: Literal["user", "assistant"]
+    content: Annotated[str, StringConstraints(min_length=1, max_length=4000)]
+
+
+class AskIn(Schema):
+    # El guardarraíl de entrada limita la pregunta a 2.000 caracteres con un mensaje claro
+    question: Question
+    document_ids: list[int] | None = Field(default=None, max_length=50)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=10)
+
+
+class SemanticSearchIn(Schema):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=500)]
+    limit: int = Field(default=10, ge=1, le=20)
+    document_ids: list[int] | None = Field(default=None, max_length=50)
+    doc_types: list[Annotated[str, StringConstraints(max_length=50)]] | None = Field(default=None, max_length=10)
+    include_old_versions: bool = False
+
+
+class FeedbackIn(Schema):
+    usage_log_id: int = Field(ge=1)
+    rating: int = Field(ge=1, le=5)
+    comment: Annotated[str, StringConstraints(max_length=1000)] | None = None
+
+
+class GenerateProposalIn(Schema):
+    sections: list[Slug] | None = Field(default=None, max_length=30)
+    instructions: Annotated[str, StringConstraints(max_length=2000)] | None = None
+
+
+class PromptPublishIn(Schema):
+    name: PromptName
+    system_prompt: PromptText
+    user_template: Annotated[str, StringConstraints(max_length=50000)] | None = None
+    notes: Annotated[str, StringConstraints(max_length=500)] | None = None
+    description: Annotated[str, StringConstraints(max_length=500)] | None = None
+    service_type: Slug | None = None
+    activate: bool = True
+
+
+class PromptPreviewIn(Schema):
+    variables: dict[str, Annotated[str, StringConstraints(max_length=20000)]] = Field(default_factory=dict)
+
+
+class ServiceConfigPatch(Schema):
+    provider: Provider | None = None
+    model_name: ModelName | None = None
+    fallback_provider: Provider | None = None
+    fallback_model: ModelName | None = None
+    max_tokens: int | None = Field(default=None, ge=1, le=64000)
+    effort: Effort | None = None
+    prompt_name: PromptName | None = None
+    description: OptStr255 = None
+    is_active: bool | None = None
+
+
+class PricingIn(Schema):
+    provider: Provider = "anthropic"
+    model_name: ModelName
+    effective_date: date
+    input_usd_per_mtok: Usd
+    output_usd_per_mtok: Usd
+    cache_read_usd_per_mtok: Usd | None = None
+    cache_write_usd_per_mtok: Usd | None = None
+
+
+class BudgetIn(Schema):
+    scope: Literal["global", "service", "user"]
+    scope_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64,
+                                               pattern=r"^[a-z0-9_]*$")] = ""
+    daily_limit_usd: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] | None = None
+    monthly_limit_usd: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] | None = None
+    alert_threshold_pct: int = Field(default=80, ge=1, le=100)
+    throttle_threshold_pct: int = Field(default=95, ge=1, le=100)
+    block_threshold_pct: int = Field(default=100, ge=1, le=1000)
+    throttle_delay_seconds: float = Field(default=2.0, ge=0, le=30)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        if not self.alert_threshold_pct <= self.throttle_threshold_pct <= self.block_threshold_pct:
+            raise ValueError("Los umbrales deben ir en orden: aviso <= frenado <= bloqueo.")
+        return self
+
+
+class BaselineIn(Schema):
+    task_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    human_time_minutes: float = Field(gt=0, le=10000)
+    human_hourly_cost_eur: Annotated[Decimal, Field(ge=0, max_digits=8, decimal_places=2)] = Decimal("65")

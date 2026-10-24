@@ -15,7 +15,12 @@ from ..errors import ConflictError, ForbiddenError, NotFoundError, ValidationErr
 from ..extensions import db
 from ..models import (AuditAction, Client, Document, Opportunity, OpportunityDocument, ServiceLine)
 from ..security.audit import audit
-from ..security.context import platform_guard, require_permission
+from ..ai import analysis as analysis_service
+from ..ai import similar as similar_service
+from ..ai.access import Viewer
+from ..errors import BusinessRuleError
+from ..queue import PRIORITY_SCHEDULED, PRIORITY_USER, enqueue
+from ..security.context import platform_guard, require_ai_module, require_permission
 from ..security.ratelimit import rate_limit
 from ..services import opportunities as service
 
@@ -32,6 +37,14 @@ SORTS = {
 }
 
 
+def _maybe_index(opp: Opportunity) -> None:
+    """Las oportunidades con relevancia alta se vectorizan para buscar parecidas."""
+    if similar_service.should_index(opp):
+        from ..tasks.ai import index_opportunity
+
+        enqueue(index_opportunity, opp.id, priority=PRIORITY_SCHEDULED)
+
+
 def summary(o: Opportunity) -> dict:
     return {
         "id": o.id, "code": o.code, "title": o.title, "status": o.status, "phase": o.funnel_phase,
@@ -45,10 +58,11 @@ def summary(o: Opportunity) -> dict:
 
 
 def detail(o: Opportunity) -> dict:
+    viewer = Viewer.current()
     docs = [
         {"document_id": link.document_id, "role": link.role, "title": link.document.title,
          "processing_status": link.document.processing_status}
-        for link in o.documents if link.is_active and link.document.is_active
+        for link in o.documents if link.is_active and link.document.is_active and viewer.can_view(link.document)
     ]
     proposals = [
         {"id": p.id, "title": p.title, "proposal_type": p.proposal_type, "status": p.status,
@@ -61,6 +75,7 @@ def detail(o: Opportunity) -> dict:
         "external_id": o.external_id, "published_at": iso(o.published_at),
         "link": (o.extra_data or {}).get("link"),
         "score_breakdown": (o.extra_data or {}).get("score_breakdown"),
+        "ai_summary": o.ai_summary, "go_no_go": (o.extra_data or {}).get("go_no_go"),
         "allowed_transitions": service.allowed_transitions(o.status),
         "documents": docs, "proposals": proposals, "created_at": iso(o.created_at),
     }
@@ -158,6 +173,7 @@ def create_opportunity():
         db.session.rollback()
         raise ConflictError("Ya existe una oportunidad con ese código.") from exc
     record_audit(AuditAction.RECORD_CREATED, opp)
+    _maybe_index(opp)
     return jsonify(detail(opp)), 201
 
 
@@ -194,6 +210,7 @@ def update_opportunity(opp_id: int):
         raise ConflictError("Ya existe una oportunidad con ese código.") from exc
     if changed:
         record_audit(AuditAction.RECORD_UPDATED, opp, fields=changed)
+        _maybe_index(opp)
     return jsonify(detail(opp))
 
 
@@ -239,7 +256,49 @@ def rescore(opp_id: int):
     if result is None:
         raise ValidationError("No hay líneas de servicio en el portfolio para puntuar.")
     db.session.commit()
+    _maybe_index(opp)
     return jsonify(result)
+
+
+# ------------------------------------------------------------------ IA (fase 5)
+@opportunities_bp.post("/<int:opp_id>/analysis")
+@platform_guard
+@require_permission("opportunities", "write")
+@require_ai_module("document_analyzer")
+@rate_limit("RATE_LIMIT_AI")
+def request_analysis(opp_id: int):
+    """Análisis GO/NO-GO de la oportunidad y sus documentos vinculados, en segundo plano."""
+    opp = get_active(Opportunity, opp_id, "Oportunidad")
+    if not (opp.description or "").strip() and not any(link.is_active for link in opp.documents):
+        raise BusinessRuleError("Añade una descripción o vincula el pliego antes de analizar.")
+    from ..tasks.ai import analyze
+
+    a = analysis_service.create("opportunity", opp.id, g.security.user_id)
+    enqueue(analyze, a.id, priority=PRIORITY_USER)
+    db.session.refresh(a)
+    return jsonify(analysis_service.to_dict(a)), 202
+
+
+@opportunities_bp.get("/<int:opp_id>/analysis")
+@platform_guard
+@require_permission("opportunities", "read")
+@rate_limit("RATE_LIMIT_READ")
+def latest_analysis(opp_id: int):
+    opp = get_active(Opportunity, opp_id, "Oportunidad")
+    a = analysis_service.latest("opportunity", opp.id)
+    if a is None:
+        raise NotFoundError("Esta oportunidad no tiene análisis.")
+    return jsonify(analysis_service.to_dict(a))
+
+
+@opportunities_bp.get("/<int:opp_id>/similar")
+@platform_guard
+@require_permission("opportunities", "read")
+@rate_limit("RATE_LIMIT_READ")
+def similar_opportunities(opp_id: int):
+    opp = get_active(Opportunity, opp_id, "Oportunidad")
+    only_open = request.args.get("only_open") == "true"
+    return jsonify(items=similar_service.similar(opp, limit=5, only_open=only_open))
 
 
 # ------------------------------------------------------------------ Documentos vinculados

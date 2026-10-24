@@ -1,5 +1,9 @@
 fastapi~=0.115
 uvicorn[standard]~=0.34
-anthropic>=0.50
+anthropic~=2.3
 httpx~=0.28
 structlog~=25.1
+# Mismo minor que el servidor (qdrant/qdrant:v1.13.x en docker-compose.yml)
+qdrant-client~=1.13.3
+# Embeddings locales (ONNX en CPU), sin clave ni coste por llamada (ADR-011)
+fastembed~=0.9.0

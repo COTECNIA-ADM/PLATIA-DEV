@@ -3,9 +3,11 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 4, backend de negocio** (10 contenedores): APIs de clientes,
-oportunidades, documentos y propuestas, colas Celery y tareas programadas. El plan completo está en
-[`docs/plan-fases.md`](docs/plan-fases.md).
+Estado actual: **fase 5a, núcleo de IA** (10 contenedores): sobre el backend de negocio
+de la fase 4, preguntas con citas sobre los documentos (RAG), análisis GO/NO-GO, redacción
+de propuestas con Claude, puntuación semántica de oportunidades y gobierno de la IA
+(modelos por tarea, prompts versionados, costes, presupuestos, ROI y RGPD). El plan
+completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido
 
@@ -13,7 +15,7 @@ Requisitos: Docker Desktop (o Docker Engine + Compose v2), Python 3 y unos 8 GB 
 
 ```bash
 python scripts/generate_env.py      # crea .env con secretos aleatorios
-# edita .env y pon tu ANTHROPIC_API_KEY (opcional en la fase 0)
+# edita .env y pon tu ANTHROPIC_API_KEY (sin ella todo funciona salvo la IA)
 docker compose up -d --build
 ```
 
@@ -61,14 +63,21 @@ datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía e
 4. En Windows, el repositorio fuerza finales de línea LF (`.gitattributes`). Si clonaste
    antes de que existiera ese fichero, clona de nuevo.
 
-## Probar la API de negocio
+## Probar la API de negocio y la IA
 
 ```bash
 python scripts/demo_fase4.py --email tu@empresa.com
+python scripts/demo_fase5.py --email tu@empresa.com
 ```
 
-Recorre el flujo completo (cliente, oportunidad, documento, propuesta con revisiones y
-paquete DOCX). Referencia de la API en [docs/api.md](docs/api.md).
+La primera recorre el flujo de negocio (cliente, oportunidad, documento, propuesta con
+revisiones y paquete DOCX). La segunda hace llamadas reales a Claude: sube un pliego de
+ejemplo, pregunta sobre él, lo analiza, redacta una propuesta y muestra el coste (unos
+céntimos; entre 0,30 y 0,80 USD con la propuesta, o unos 0,05 USD con `--sin-propuesta`).
+Referencia de la API en [docs/api.md](docs/api.md).
+
+La primera vez que se construye `ai_service` descarga el modelo de embeddings (unos
+220 MB) dentro de la imagen: tarda unos minutos más.
 
 ## Contenedores
 
@@ -78,7 +87,7 @@ paquete DOCX). Referencia de la API en [docs/api.md](docs/api.md).
 | redis | redis:7 | data | Caché, sesiones y broker de Celery |
 | qdrant | qdrant/qdrant | data | Vectores para RAG |
 | backend | build `backend/` | backend + data | API Flask |
-| ai_service | build `ai_service/` | backend + data | Servicio de IA (FastAPI + Claude) |
+| ai_service | build `ai_service/` | backend + data | Pasarela de IA: Claude con modelos de reserva, embeddings locales y Qdrant |
 | celery_default | build `backend/` | backend + data | Colas rápidas: alertas, tareas generales y sincronización |
 | celery_ai | build `backend/` | backend + data | Colas lentas: documentos e IA |
 | celery_beat | build `backend/` | data | Tareas programadas (alertas, limpieza RGPD, salud) |

@@ -1,23 +1,10 @@
 from unittest.mock import AsyncMock, patch
 
 import httpx
-import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
-from app.settings import Settings, get_settings
+from app.main import app, get_settings
 
-
-def _settings(**overrides) -> Settings:
-    base = {"api_key": "secret", "anthropic_api_key": "sk-test", "qdrant_api_key": ""}
-    base.update(overrides)
-    return Settings(**base)
-
-
-@pytest.fixture()
-def client():
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+from .conftest import API_HEADERS, make_settings
 
 
 def _qdrant_ok():
@@ -26,21 +13,28 @@ def _qdrant_ok():
 
 
 def test_health_requires_api_key(client):
-    app.dependency_overrides[get_settings] = lambda: _settings()
     assert client.get("/health").status_code == 401
     assert client.get("/health", headers={"X-API-Key": "otra"}).status_code == 401
 
 
 def test_health_ok(client):
-    app.dependency_overrides[get_settings] = lambda: _settings()
     with _qdrant_ok():
-        resp = client.get("/health", headers={"X-API-Key": "secret"})
+        resp = client.get("/health", headers=API_HEADERS)
     assert resp.status_code == 200
-    assert resp.json()["status"] == "healthy"
+    body = resp.json()
+    assert body["status"] == "healthy"
+    assert body["embedding"]["provider"] == "hash"
+    assert body["checks"]["anthropic_circuit"] == "closed"
 
 
 def test_health_degraded_without_anthropic_key(client):
-    app.dependency_overrides[get_settings] = lambda: _settings(anthropic_api_key="")
+    app.dependency_overrides[get_settings] = lambda: make_settings(anthropic_api_key="")
     with _qdrant_ok():
-        resp = client.get("/health", headers={"X-API-Key": "secret"})
+        resp = client.get("/health", headers=API_HEADERS)
     assert resp.json()["status"] == "degraded"
+
+
+def test_health_unhealthy_without_qdrant(client):
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
+        resp = client.get("/health", headers=API_HEADERS)
+    assert resp.json()["status"] == "unhealthy"

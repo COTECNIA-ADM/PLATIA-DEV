@@ -145,6 +145,17 @@ class AuditAction:
     DATA_EXPORTED = "DATA_EXPORTED"
     TASK_FAILED = "TASK_FAILED"
     TASK_REQUEUED = "TASK_REQUEUED"
+    # Gobernanza de IA (fase 5)
+    AI_REQUEST_BLOCKED = "AI_REQUEST_BLOCKED"
+    AI_OUTPUT_BLOCKED = "AI_OUTPUT_BLOCKED"
+    AI_BUDGET_EXCEEDED = "AI_BUDGET_EXCEEDED"
+    AI_CONFIG_CHANGED = "AI_CONFIG_CHANGED"
+    PROMPT_PUBLISHED = "PROMPT_PUBLISHED"
+    PROMPT_ACTIVATED = "PROMPT_ACTIVATED"
+    PROMPT_INTEGRITY_VIOLATION = "PROMPT_INTEGRITY_VIOLATION"
+    PII_DETECTED_IN_OUTPUT = "PII_DETECTED_IN_OUTPUT"
+    GDPR_AI_EXPORT = "GDPR_AI_EXPORT"
+    GDPR_AI_ERASURE = "GDPR_AI_ERASURE"
 
 
 class AuditLog(db.Model):
@@ -222,7 +233,12 @@ class FailedTask(TimestampMixin, db.Model):
 
 # ---------------------------------------------------------------- Gobernanza IA (Cap. 11)
 class LLMServiceConfig(AuditMixin, db.Model):
-    """Qué modelo usar para cada tipo de tarea, con modelo de reserva."""
+    """Qué modelo usa cada tipo de tarea y su cadena de reserva (patrón LLM Factory).
+
+    Se edita desde Admin sin redesplegar. ``temperature`` se conserva por
+    compatibilidad pero no se envía: los modelos Claude 5.x no admiten parámetros
+    de muestreo y la profundidad se controla con ``effort`` (ADR-011).
+    """
 
     __bind_key__ = BIND
     __tablename__ = "llm_service_config"
@@ -234,15 +250,28 @@ class LLMServiceConfig(AuditMixin, db.Model):
     fallback_model: Mapped[str | None] = mapped_column(String(100))
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
     temperature: Mapped[float | None] = mapped_column(Float)
+    effort: Mapped[str | None] = mapped_column(String(10))  # low | medium | high
+    prompt_name: Mapped[str | None] = mapped_column(String(100))  # prompt principal del servicio
+    description: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    def targets(self) -> list[dict]:
+        chain = [{"provider": self.provider, "model": self.model_name}]
+        if self.fallback_provider and self.fallback_model:
+            chain.append({"provider": self.fallback_provider, "model": self.fallback_model})
+        return chain
 
 
 class LLMUsageLog(db.Model):
-    """Una fila por cada llamada a un LLM: modelo, tokens, coste y latencia."""
+    """Una fila por cada llamada a un LLM, también las fallidas: modelo, tokens,
+    coste, latencia, versión del prompt y si la respondió un modelo de reserva."""
 
     __bind_key__ = BIND
     __tablename__ = "llm_usage_log"
-    __table_args__ = (Index("ix_llm_usage_service_created", "service_type", "created_at"),)
+    __table_args__ = (
+        Index("ix_llm_usage_service_created", "service_type", "created_at"),
+        Index("ix_llm_usage_correlation", "correlation_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
     service_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -257,14 +286,26 @@ class LLMUsageLog(db.Model):
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     error_type: Mapped[str | None] = mapped_column(String(100))
+    stop_reason: Mapped[str | None] = mapped_column(String(30))
+    is_fallback: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), nullable=False)
     prompt_hash: Mapped[str | None] = mapped_column(String(64))
     user_id: Mapped[int | None] = mapped_column(Integer, index=True)
     request_id: Mapped[str | None] = mapped_column(String(64))
+    # Agrupa las llamadas de una misma tarea (p. ej. todas las secciones de una propuesta)
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    # Primeros 500 caracteres de la respuesta, solo para el escaneo de datos
+    # personales; se borran al cumplir la retención (Capítulo 11)
+    output_sample: Mapped[str | None] = mapped_column(String(500))
+    contained_pii: Mapped[bool | None] = mapped_column(Boolean)
+    pii_types: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class LLMModelPricing(TimestampMixin, db.Model):
-    """Precio por modelo en USD por millón de tokens (moneda y unidad del proveedor)."""
+    """Precio por modelo en USD por millón de tokens (moneda y unidad del proveedor).
+
+    Las filas no se editan: un cambio de precio es una fila nueva con otra fecha de
+    efecto, así los costes ya registrados no cambian."""
 
     __bind_key__ = BIND
     __tablename__ = "llm_model_pricing"
@@ -274,22 +315,30 @@ class LLMModelPricing(TimestampMixin, db.Model):
     effective_date: Mapped[date] = mapped_column(Date, primary_key=True)
     input_usd_per_mtok: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
     output_usd_per_mtok: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    # Lectura y escritura de la caché de prompts. Si faltan: 10 % y 125 % de la entrada.
+    cache_read_usd_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    cache_write_usd_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
 
 
 class LLMQualityScore(TimestampMixin, db.Model):
-    """Puntuaciones de calidad de una respuesta (humana o automática)."""
+    """Puntuaciones de calidad de una respuesta (evaluación automática o persona)."""
 
     __bind_key__ = BIND
     __tablename__ = "llm_quality_scores"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     usage_log_id: Mapped[int] = mapped_column(ForeignKey("llm_usage_log.id"), nullable=False)
+    service_type: Mapped[str | None] = mapped_column(String(50), index=True)
     hallucination_score: Mapped[float | None] = mapped_column(Float)
     groundedness_score: Mapped[float | None] = mapped_column(Float)
     relevance_score: Mapped[float | None] = mapped_column(Float)
     coherence_score: Mapped[float | None] = mapped_column(Float)
+    completeness_score: Mapped[float | None] = mapped_column(Float)
+    faithfulness_score: Mapped[float | None] = mapped_column(Float)
     bias_score: Mapped[float | None] = mapped_column(Float)
     toxicity_score: Mapped[float | None] = mapped_column(Float)
+    composite_score: Mapped[float | None] = mapped_column(Float)
+    user_rating: Mapped[int | None] = mapped_column(Integer)  # 1-5
     pii_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     reviewer_type: Mapped[str] = mapped_column(String(20), default="automated", nullable=False)
     reviewer_id: Mapped[int | None] = mapped_column(Integer)
@@ -300,6 +349,8 @@ class Prompt(AuditMixin, db.Model):
     """Prompts versionados en base de datos (CLAUDE.md: nunca en el código).
 
     Cada cambio crea una versión nueva; solo una versión por nombre está activa.
+    ``content_hash`` permite detectar cambios hechos directamente en la base de
+    datos, saltándose el versionado (comprobación de integridad, Capítulo 11).
     """
 
     __bind_key__ = BIND
@@ -314,3 +365,30 @@ class Prompt(AuditMixin, db.Model):
     user_template: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    notes: Mapped[str | None] = mapped_column(String(500))  # qué cambia en esta versión
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class BudgetConfig(AuditMixin, db.Model):
+    """Límite de gasto en IA con acciones graduadas: aviso, frenado y bloqueo.
+
+    ``scope``: global (toda la plataforma), service (un tipo de tarea) o user (por
+    persona; ``scope_id`` vacío = el mismo límite para cada usuario)."""
+
+    __bind_key__ = BIND
+    __tablename__ = "budget_configs"
+    __table_args__ = (UniqueConstraint("scope", "scope_id", name="uq_budget_scope"),)
+
+    SCOPES = ("global", "service", "user")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(10), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    daily_limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    monthly_limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    alert_threshold_pct: Mapped[int] = mapped_column(Integer, default=80, nullable=False)
+    throttle_threshold_pct: Mapped[int] = mapped_column(Integer, default=95, nullable=False)
+    block_threshold_pct: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    throttle_delay_seconds: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

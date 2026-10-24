@@ -1,4 +1,4 @@
-# API de negocio (fase 4)
+# API de negocio (fases 4 y 5a)
 
 Todas las rutas cuelgan de `http://localhost:8080/api` y exigen sesión
 (`Authorization: Bearer <token>`). La aplicación activa va en `X-App-Code`
@@ -16,7 +16,9 @@ Todas las rutas cuelgan de `http://localhost:8080/api` y exigen sesión
 | Errores | `{"error": "mensaje", "type": "validation|conflict|business_rule|forbidden|not_found"}`; en validación, `fields` |
 | Borrado | Lógico (el registro deja de verse, no se destruye) |
 
-Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación 5 (429 con `Retry-After`).
+Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación 5 e IA 10
+(429 con `Retry-After`). Los errores de IA añaden los tipos `ai_unavailable` (503),
+`ai_disabled` (503), `ai_rejected` (422), `guardrail` (422) y `budget_exceeded` (429).
 
 ## Recursos
 
@@ -31,6 +33,11 @@ Límites por usuario y minuto: lectura 60, escritura 20, subida 10, exportación
 | Talento | `GET/POST /talent/profiles` (filtros `family`, `seniority`, `skill`, `available`, `q`), `GET/PATCH/DELETE /talent/profiles/{id}` | `talent` |
 | Notificaciones | `GET /notifications` (`unread=true`, `type`), `GET /notifications/unread-count`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | `notifications` |
 | Alertas | `GET /alerts` (`open=true`), `POST /alerts/{id}/resolve` | `alerts` |
+| IA | `POST /ai/ask` (`question`, `document_ids`, `history`), `POST /ai/search` (`query`, `limit`, `document_ids`, `doc_types`), `POST /ai/feedback` (`usage_log_id`, `rating` 1-5), `GET /ai/analyses/{id}` | `documents.read` + módulo de IA |
+| IA en documentos | `POST/GET /documents/{id}/analysis` (GO/NO-GO), `POST /documents/{id}/reindex`; `PATCH /documents/{id}` admite `allowed_roles` | `documents` |
+| IA en oportunidades | `POST/GET /opportunities/{id}/analysis`, `GET /opportunities/{id}/similar` (`only_open=true`) | `opportunities` |
+| IA en propuestas | `POST /proposals/{id}/generate` (`sections`, `instructions`) | `proposals.write` + `proposal_generator` |
+| IA (admin) | `/admin/ai/prompts` (+ `/{name}/versions`, `/{name}/versions/{v}/activate`, `/{name}/preview`), `/admin/ai/services[/{tipo}]`, `/admin/ai/pricing`, `/admin/ai/budgets[/{id}]`, `/admin/ai/usage`, `/admin/ai/usage/summary`, `/admin/ai/roi`, `/admin/ai/baselines[/{tipo}]`, `/admin/ai/quality`, `/admin/ai/rag/collections`, `POST /admin/ai/rag/reindex`, `/admin/ai/health`, `/admin/ai/compliance`, `GET /admin/ai/gdpr/users/{id}`, `POST /admin/ai/gdpr/users/{id}/erase` | `prompts`, `llm_config`, `audit`, `users` |
 | Colas (admin) | `GET /admin/tasks/queues`, `GET /admin/tasks/failed`, `POST /admin/tasks/failed/{id}/review`, `POST /admin/tasks/failed/{id}/retry` | `tasks` |
 
 ## Flujos
@@ -53,6 +60,21 @@ El detalle incluye `allowed_transitions`.
 **Documento**: al subirlo queda `pending`; el worker `celery_ai` extrae el texto (PDF,
 DOCX, TXT, MD, CSV) y lo deja `processed` o `failed`. Consulta `GET /documents/{id}/status`.
 Un fichero idéntico a otro ya subido devuelve 409 con `existing_document_id`.
+Después se vectoriza (`index_status`: `pending → indexed`) y se cataloga con IA
+(`ai_summary`, `ai_keywords`, `ai_entities`). Con `allowed_roles` (por ejemplo
+`["manager"]`) solo lo ven su propietario, esos roles y quien tenga `documents.manage`;
+para el resto no existe (404), tampoco en las búsquedas ni en las respuestas de la IA.
+
+**IA** (decisiones en [ADR-011](adr/ADR-011-nucleo-ia.md)):
+- `POST /ai/ask` responde solo con fragmentos que la persona puede ver, con citas `[n]`,
+  `sources` y `sufficient_context` (false si los documentos no bastan). Sin fuentes no se
+  llama al modelo. La pregunta pasa por guardarraíles (máx. 2.000 caracteres, intentos de
+  inyección, datos personales que se ocultan).
+- El análisis GO/NO-GO y la redacción de propuestas van en segundo plano (202) y avisan
+  con una notificación `REPORT_READY`. La redacción solo rellena `ai_content`: lo editado a
+  mano (`edited_content`) no se toca, salvo que pidas esa sección en `sections`.
+- Módulos de IA por rol (`ai_modules_access`): el analista tiene `document_analyzer` y
+  `copilot_chat`; el gestor, todos; el de consulta, ninguno.
 
 ## Quién puede qué (operations)
 
@@ -70,7 +92,10 @@ Con la plataforma levantada y tu usuario administrador:
 
 ```bash
 python scripts/demo_fase4.py --email tu@empresa.com
+python scripts/demo_fase5.py --email tu@empresa.com   # llamadas reales a Claude (céntimos)
 ```
 
-Pide la contraseña sin mostrarla y recorre el flujo completo: cliente, oportunidad
-puntuada, documento procesado, propuesta premium con doble revisión y paquete DOCX.
+Piden la contraseña sin mostrarla. La de la fase 4 recorre cliente, oportunidad,
+documento y propuesta con revisiones. La de la fase 5 sube un pliego de ejemplo, le hace
+una pregunta, lo analiza (GO/NO-GO), puntúa una oportunidad, redacta una propuesta y
+muestra el coste y el ahorro. `--sin-propuesta` se salta la redacción (la parte cara).

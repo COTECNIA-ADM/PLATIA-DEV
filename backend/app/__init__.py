@@ -57,6 +57,8 @@ def create_app(config: object | None = None) -> Flask:
         return apply_security_headers(response)
 
     from .routes.admin import admin_bp
+    from .routes.admin_ai import admin_ai_bp
+    from .routes.ai import ai_bp
     from .routes.admin_tasks import admin_tasks_bp
     from .routes.auth import auth_bp
     from .routes.catalog import catalog_bp
@@ -69,7 +71,7 @@ def create_app(config: object | None = None) -> Flask:
     from .routes.talent import talent_bp
 
     for bp in (health_bp, auth_bp, admin_bp, admin_tasks_bp, clients_bp, opportunities_bp,
-               documents_bp, proposals_bp, catalog_bp, talent_bp, inbox_bp):
+               documents_bp, proposals_bp, catalog_bp, talent_bp, inbox_bp, ai_bp, admin_ai_bp):
         app.register_blueprint(bp)
 
     init_celery(app)

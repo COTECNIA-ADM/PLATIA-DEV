@@ -82,6 +82,7 @@ class Config:
         self.CELERY_BROKER_URL = redis_url("REDIS_DB_CELERY", "1")
         _security_settings(self)
         _business_settings(self)
+        _ai_settings(self)
 
 
 def _business_settings(cfg, env=None) -> None:
@@ -109,6 +110,35 @@ def _business_settings(cfg, env=None) -> None:
     cfg.QUEUE_ALERT_THRESHOLDS = env.get("QUEUE_ALERT_THRESHOLDS", "default=50,ai=20,documents=20,automation=10")
     cfg.TIMEZONE = env.get("TIMEZONE", "Europe/Madrid")
     cfg.CELERY_TASK_TIME_LIMIT = int(env.get("CELERY_TASK_TIME_LIMIT", "600"))
+
+
+def _ai_settings(cfg, env=None) -> None:
+    """Núcleo de IA (Capítulos 10-12). La elección de modelo por tarea está en la BD
+    (llm_service_config), no aquí: se cambia desde Admin sin reiniciar."""
+    env = os.environ if env is None else env
+
+    def _flag(var: str, default: str) -> bool:
+        return env.get(var, default).strip().lower() in ("1", "true", "yes", "si", "sí")
+
+    cfg.AI_ENABLED = _flag("AI_ENABLED", "true")
+    cfg.AI_REQUEST_TIMEOUT = float(env.get("AI_REQUEST_TIMEOUT", "180"))
+    cfg.AI_AUTO_ENRICH = _flag("AI_AUTO_ENRICH", "true")
+    cfg.AI_MAX_THROTTLE_SECONDS = float(env.get("AI_MAX_THROTTLE_SECONDS", "10"))
+    cfg.AI_SAMPLE_RETENTION_DAYS = int(env.get("AI_SAMPLE_RETENTION_DAYS", "30"))
+    cfg.AI_USD_EUR_RATE = float(env.get("AI_USD_EUR_RATE", "0.92"))
+    # RAG (Capítulo 12)
+    cfg.RAG_SCORE_THRESHOLD = float(env.get("RAG_SCORE_THRESHOLD", "0.35"))
+    cfg.RAG_MAX_CHUNKS = int(env.get("RAG_MAX_CHUNKS", "6"))
+    cfg.RAG_QUERY_REWRITE = _flag("RAG_QUERY_REWRITE", "true")
+    cfg.RAG_EVAL_SAMPLE_RATE = float(env.get("RAG_EVAL_SAMPLE_RATE", "0.05"))
+    # Puntuación semántica de oportunidades (Capítulo 9): similitud -> 0-10
+    cfg.SEMANTIC_SCORING = _flag("SEMANTIC_SCORING", "true")
+    cfg.SEMANTIC_SIM_LOW = float(env.get("SEMANTIC_SIM_LOW", "0.15"))
+    cfg.SEMANTIC_SIM_HIGH = float(env.get("SEMANTIC_SIM_HIGH", "0.65"))
+    cfg.OPPORTUNITY_VECTOR_THRESHOLD = float(env.get("OPPORTUNITY_VECTOR_THRESHOLD", "7.0"))
+    # Caracteres máximos que se envían al modelo por documento
+    cfg.ANALYSIS_MAX_CHARS = int(env.get("ANALYSIS_MAX_CHARS", "150000"))
+    cfg.ENRICH_MAX_CHARS = int(env.get("ENRICH_MAX_CHARS", "40000"))
 
 
 def _security_settings(cfg, env=None) -> None:
@@ -177,6 +207,12 @@ class TestConfig:
             "RATE_LIMIT_WRITE": "200",
             "RATE_LIMIT_READ": "200",
             "RATE_LIMIT_UPLOAD": "50",
+        })
+        _ai_settings(self, {
+            "SEMANTIC_SCORING": "false",  # los tests de IA lo activan con un cliente falso
+            "RAG_SCORE_THRESHOLD": "0.05",  # el cliente falso puntúa por palabras en común
+            "RAG_EVAL_SAMPLE_RATE": "0",
+            "AI_MAX_THROTTLE_SECONDS": "0",
         })
         # Las tareas se ejecutan en línea, sin broker
         self.CELERY_BROKER_URL = "memory://"

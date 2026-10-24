@@ -15,3 +15,5 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [007](ADR-007-modelos-configurables.md) | Modelos y proveedores de LLM configurables | Aceptado |
 | [008](ADR-008-migraciones-multi-bind.md) | Modelos y migraciones en tres esquemas | Aceptado |
 | [009](ADR-009-seguridad-iam.md) | JWT con refresco rotatorio, MFA TOTP y roles por aplicación verificados en BD | Aceptado |
+| [010](ADR-010-backend-negocio-y-colas.md) | Backend de negocio por dominios, contrato de API común y colas Celery segmentadas | Aceptado |
+| [011](ADR-011-nucleo-ia.md) | Núcleo de IA: gobierno en el backend, pasarela sin estado, embeddings locales y RAG con control de acceso | Aceptado |

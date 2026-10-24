@@ -8,14 +8,15 @@ from sqlalchemy.orm import selectinload
 
 from ..api.common import (apply_changes, check_version, ensure_can_modify, get_active, iso, money,
                           paginate, parse_body, record_audit)
-from ..api.schemas import ProposalIn, ProposalPatch, ReviewIn, SectionIn, SectionPatch, StatusChange
+from ..api.schemas import (GenerateProposalIn, ProposalIn, ProposalPatch, ReviewIn, SectionIn, SectionPatch,
+                           StatusChange)
 from ..errors import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError, ValidationError
 from ..extensions import db
 from ..models import (AuditAction, Opportunity, Proposal, ProposalAttachment, ProposalSection,
                       ProposalTemplate)
 from ..queue import PRIORITY_USER, enqueue
 from ..security.audit import audit
-from ..security.context import platform_guard, require_permission
+from ..security.context import platform_guard, require_ai_module, require_permission
 from ..security.ratelimit import rate_limit
 from ..services import proposals as service
 from ..services import storage
@@ -29,6 +30,7 @@ def summary(p: Proposal) -> dict:
             "opportunity_title": p.opportunity.title if p.opportunity else None,
             "version_number": p.version_number, "total_amount_eur": money(p.total_amount_eur),
             "owner_user_id": p.owner_user_id, "sent_at": iso(p.sent_at),
+            "generation_status": p.generation_status,
             "updated_at": iso(p.updated_at), "version": p.row_version}
 
 
@@ -47,6 +49,7 @@ def detail(p: Proposal) -> dict:
     round_reviews = [r for r in p.reviews if r.review_round == p.review_round and r.is_active]
     return {
         **summary(p), "template_id": p.template_id, "review_round": p.review_round,
+        "generation_error": p.generation_error, "generated_at": iso(p.generated_at),
         "reviewed_by": p.reviewed_by, "reviewed_at": iso(p.reviewed_at),
         "allowed_transitions": [t for t in service.allowed_transitions(p) if t != "approved"],
         "required_reviews": sorted(service.required_reviews(p)),
@@ -325,3 +328,35 @@ def delete_attachment(proposal_id: int, attachment_id: int):
     _attachment(proposal, attachment_id).soft_delete()
     db.session.commit()
     return "", 204
+
+
+# ------------------------------------------------------------------ IA (fase 5)
+@proposals_bp.post("/<int:proposal_id>/generate")
+@platform_guard
+@require_permission("proposals", "write")
+@require_ai_module("proposal_generator")
+@rate_limit("RATE_LIMIT_AI")
+def generate(proposal_id: int):
+    """Redacta con IA las secciones (por defecto, las que nadie ha editado a mano).
+
+    Va en segundo plano: el avance se ve en ``generation_status`` y en cada sección."""
+    proposal = _get(proposal_id)
+    ensure_can_modify("proposals", proposal)
+    service.ensure_editable(proposal)
+    data = parse_body(GenerateProposalIn)
+    if proposal.generation_status in ("queued", "running"):
+        raise ConflictError("La propuesta ya se está redactando.")
+    from ..ai.proposal_writer import sections_to_write
+    from ..tasks.ai import generate_proposal
+
+    targets = sections_to_write(proposal, data.sections)
+    if not targets:
+        raise BusinessRuleError("No hay secciones que redactar (las editadas a mano solo se "
+                                "reescriben si las indicas en 'sections').")
+    proposal.set_system_fields(generation_status="queued", generation_error=None)
+    db.session.commit()
+    enqueue(generate_proposal, proposal.id, g.security.user_id, data.sections, data.instructions,
+            priority=PRIORITY_USER)
+    db.session.refresh(proposal)
+    return jsonify({"id": proposal.id, "generation_status": proposal.generation_status,
+                    "sections": [s.key for s in targets]}), 202
