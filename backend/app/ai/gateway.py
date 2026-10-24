@@ -45,6 +45,9 @@ class AIResult:
     is_fallback: bool
     stop_reason: str | None
     correlation_id: str
+    content: list | None = None  # bloques completos (texto, tool_use, razonamiento)
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def get_config(service_type: str) -> LLMServiceConfig:
@@ -95,15 +98,78 @@ def run(service_type: str, *, variables: dict | None = None, user_id: int | None
     messages = [*(history or [])]
     if user_message:
         messages.append({"role": "user", "content": user_message})
+    return _call(config, prompt, system, messages, user_id=user_id, json_schema=json_schema,
+                 correlation_id=correlation_id, max_tokens=max_tokens)
+
+
+def converse(service_type: str, *, prompt_name: str, messages: list[dict], tools: list[dict] | None = None,
+             user_id: int | None = None, correlation_id: str | None = None, max_tokens: int | None = None,
+             stream: bool = False):
+    """Un turno de conversación o del bucle de un agente (Capítulos 14 y 15).
+
+    El prompt de sistema es la versión activa de ``prompt_name``, sin variables:
+    el contexto que cambia (fecha, persona, memoria) lo pone quien llama en el
+    primer mensaje, a partir de la plantilla de usuario del prompt. Así el sistema
+    no cambia entre turnos y se aprovecha la caché. Los mensajes pueden llevar
+    bloques ``tool_use``/``tool_result``. Cada intento queda en ``llm_usage_log``.
+
+    Con ``stream=True`` devuelve un generador: produce los trozos de texto según
+    llegan y su valor de retorno (``result = yield from converse(...)``) es el
+    ``AIResult``. Sin streaming devuelve el ``AIResult`` directamente."""
+    config = get_config(service_type)
+    budget.check(service_type, user_id)
+    prompt = prompts.get_active(prompt_name)
+    call = _call_stream(config, prompt, prompt.system_prompt, messages, user_id=user_id, tools=tools,
+                        correlation_id=correlation_id, max_tokens=max_tokens, stream=stream)
+    if stream:
+        return call
+    try:
+        while True:
+            next(call)
+    except StopIteration as done:
+        return done.value
+
+
+def _call(config: LLMServiceConfig, prompt: prompts.ActivePrompt, system: str, messages: list[dict], *,
+          user_id: int | None, json_schema: dict | None = None, correlation_id: str | None = None,
+          max_tokens: int | None = None) -> AIResult:
+    call = _call_stream(config, prompt, system, messages, user_id=user_id, json_schema=json_schema,
+                        correlation_id=correlation_id, max_tokens=max_tokens, stream=False)
+    try:
+        while True:
+            next(call)
+    except StopIteration as done:
+        return done.value
+
+
+def _call_stream(config: LLMServiceConfig, prompt: prompts.ActivePrompt, system: str, messages: list[dict], *,
+                 user_id: int | None, json_schema: dict | None = None, tools: list[dict] | None = None,
+                 correlation_id: str | None = None, max_tokens: int | None = None, stream: bool = False):
+    service_type = config.service_type
     correlation_id = correlation_id or str(uuid.uuid4())
     payload = {
         "service_type": service_type, "targets": config.targets(), "system": system, "messages": messages,
         "max_tokens": max_tokens or config.max_tokens, "effort": config.effort, "json_schema": json_schema,
         "timeout_seconds": current_app.config.get("AI_REQUEST_TIMEOUT", 180), "correlation_id": correlation_id,
     }
+    if tools:
+        payload["tools"] = tools
     started = time.monotonic()
     try:
-        body = get_ai_client().complete(payload)
+        client = get_ai_client()
+        if stream:
+            try:
+                body = yield from client.stream(payload)
+            except GeneratorExit:
+                # La persona cerró la conexión a mitad de respuesta: el intento queda
+                # registrado (sin tokens conocidos) para no tener llamadas invisibles
+                _log_attempts([{"provider": config.provider, "model": config.model_name, "success": False,
+                                "error_type": "client_disconnected"}], service_type=service_type, prompt=prompt,
+                              user_id=user_id, correlation_id=correlation_id, text=None, is_fallback=False)
+                db.session.commit()
+                raise
+        else:
+            body = client.complete(payload)
     except AIServiceError as exc:
         attempts = exc.body.get("attempts") or []
         if not attempts:
@@ -130,7 +196,8 @@ def run(service_type: str, *, variables: dict | None = None, user_id: int | None
         provider=body.get("provider") or final.provider, model=body.get("model") or final.model_name,
         prompt_name=prompt.name, prompt_version=prompt.version, cost_usd=sum((r.cost_usd for r in rows), Decimal(0)),
         latency_ms=int((time.monotonic() - started) * 1000), is_fallback=bool(body.get("is_fallback")),
-        stop_reason=body.get("stop_reason"), correlation_id=correlation_id,
+        stop_reason=body.get("stop_reason"), correlation_id=correlation_id, content=body.get("content"),
+        input_tokens=sum(r.input_tokens for r in rows), output_tokens=sum(r.output_tokens for r in rows),
     )
 
 

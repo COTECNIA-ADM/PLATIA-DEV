@@ -306,7 +306,7 @@ class ProposalAttachment(BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "proposal_attachments"
 
-    KINDS = ("competitive_analysis", "generated", "other")
+    KINDS = ("competitive_analysis", "generated", "cv", "other")
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id"), nullable=False, index=True)
@@ -484,3 +484,43 @@ class Notification(BusinessMixin, db.Model):
     link: Mapped[str | None] = mapped_column(String(500))  # enlace profundo en el frontal
     extra_data: Mapped[dict | None] = mapped_column(JSON)
     read_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+# ---------------------------------------------------------------- Copiloto (Cap. 14)
+class ChatConversation(BusinessMixin, db.Model):
+    """Conversación con el copiloto. Es de una persona: nadie más la ve."""
+
+    __bind_key__ = BIND
+    __tablename__ = "chat_conversations"
+    __table_args__ = (Index("ix_chat_conversations_user_last", "user_id", "last_message_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), default="Nueva conversación", nullable=False)
+    # Resumen de los turnos antiguos (los recientes van completos)
+    summary: Mapped[str | None] = mapped_column(Text)
+    summarized_until_id: Mapped[int | None] = mapped_column(BigInteger)
+    message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="conversation",
+                                                         order_by="ChatMessage.id")
+
+
+class ChatMessage(BusinessMixin, db.Model):
+    __bind_key__ = BIND
+    __tablename__ = "chat_messages"
+    __table_args__ = (Index("ix_chat_messages_conversation", "conversation_id", "id"),)
+
+    ROLES = ("user", "assistant")
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("chat_conversations.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(20))
+    agent_run_uid: Mapped[str | None] = mapped_column(String(36))
+    # Fuentes citadas, herramientas usadas, menciones resueltas, acción propuesta
+    meta: Mapped[dict | None] = mapped_column(JSON)
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="messages")

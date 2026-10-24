@@ -297,3 +297,33 @@ def cleanup_usage_samples() -> dict:
                                 .values(output_sample=None))
     db.session.commit()
     return {"cleared": result.rowcount or 0}
+
+
+# ------------------------------------------------------------------ CV a medida (fase 5c)
+@celery.task(name="tasks.ai.tailor_cv", base=PlatformTask, bind=True, max_retries=2)
+def tailor_cv(self, proposal_id: int, profile_id: int, user_id: int | None) -> dict:
+    from ..ai import cv_tailoring
+    from ..models import CVProfile
+
+    proposal = db.session.get(Proposal, proposal_id)
+    profile = db.session.get(CVProfile, profile_id)
+    if proposal is None or profile is None or not proposal.is_active or not profile.is_active:
+        return {"proposal_id": proposal_id, "status": "missing"}
+    try:
+        result = cv_tailoring.tailor(proposal, profile, user_id)
+    except AIUnavailableError as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry_later(exc)
+        result = None
+        error = exc.message
+    except FINAL_ERRORS as exc:
+        result, error = None, exc.message
+    if result is None:
+        if user_id:
+            notify(user_id, "SYSTEM", "No se ha podido preparar el CV", error[:500], link=f"/proposals/{proposal_id}")
+        return {"proposal_id": proposal_id, "status": "failed"}
+    if user_id:
+        notify(user_id, "REPORT_READY", "CV a medida listo",
+               f"El CV de {profile.full_name[:100]} para «{proposal.title[:150]}» está adjunto a la propuesta.",
+               link=f"/proposals/{proposal_id}")
+    return {"proposal_id": proposal_id, "status": "done", **result}

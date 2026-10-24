@@ -67,6 +67,12 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   (filtro en MySQL, en Qdrant y otra vez sobre los resultados).
 - Texto libre del usuario hacia la IA: `guardrails.check_input`; respuesta mostrada:
   `guardrails.check_output`.
+- Copiloto y agentes (ADR-013): las herramientas del agente están en `app/agents/tools.py`,
+  llaman a servicios de negocio y declaran su nivel mínimo (`auto`, `notify`, `approve`);
+  todo lo que cambia datos es `approve`. Nada de herramientas de terminal ni de ficheros.
+  El prompt de un agente se llama `agent.<slug>` (slug con guion bajo).
+- Endpoints SSE: la vista solo valida y pasa ids; el generador vuelve a cargar los
+  registros (Flask cierra la sesión de BD antes de enviar el cuerpo).
 - Campos que escriben las tareas en segundo plano (indexado, IA): `obj.set_system_fields(...)`,
   que no cambia `row_version`.
 

@@ -11,8 +11,8 @@ from pathlib import Path
 import structlog
 
 from .extensions import db
-from .models import (App, AppRole, BudgetConfig, HumanBaselineConfig, IntentPattern, LLMModelPricing,
-                     LLMServiceConfig, Prompt, ProposalTemplate, ServiceLine)
+from .models import (AgentDefinition, App, AppRole, BudgetConfig, HumanBaselineConfig, IntentPattern,
+                     LLMModelPricing, LLMServiceConfig, Prompt, ProposalTemplate, ServiceLine)
 
 log = structlog.get_logger(__name__)
 
@@ -36,14 +36,15 @@ ROLES = {
             "documents": ["read", "write", "upload", "delete", "manage"],
             "proposals": ["read", "write", "delete", "manage", "approve", "send"],
             "templates": RW, "portfolio": RW, "talent": ["read", "write", "delete"],
-            "alerts": RW, "notifications": R, "reports": ["read", "generate"],
+            "alerts": RW, "notifications": R, "reports": ["read", "generate"], "copilot": RW,
             "ai_modules_access": AI_ALL,
         }),
         # El analista solo modifica lo que tiene asignado (autorización por objeto)
         "analyst": ("Analista", False, {
             "clients": R, "opportunities": RW, "documents": ["read", "upload", "write"],
             "proposals": RW, "templates": R, "portfolio": R, "talent": R, "alerts": R,
-            "notifications": R, "reports": R, "ai_modules_access": ["document_analyzer", "copilot_chat"],
+            "notifications": R, "reports": R, "copilot": RW,
+            "ai_modules_access": ["document_analyzer", "copilot_chat"],
         }),
         "viewer": ("Consulta", False, {
             "clients": R, "opportunities": R, "documents": R, "proposals": R, "reports": R,
@@ -54,18 +55,18 @@ ROLES = {
     "analytics": {
         "admin": ("Administrador de analítica", True, {}),
         "analyst": ("Analista de negocio", False, {"dashboards": RW, "reports": ["read", "generate"],
-                                                   "ai_modules_access": ["copilot_chat"]}),
+                                                   "copilot": RW, "ai_modules_access": ["copilot_chat"]}),
         "viewer": ("Consulta", False, {"dashboards": R, "reports": R, "ai_modules_access": []}),
     },
     "admin": {
         "superadmin": ("Superadministrador", True, {}),
         "admin": ("Administrador", False, {
             "users": RW, "roles": RW, "llm_config": RW, "prompts": RW, "audit": R, "health": R,
-            "tasks": RW, "search": RW,
+            "tasks": RW, "search": RW, "agents": RW,
         }),
         "auditor": ("Auditor", False, {
             "users": R, "roles": R, "llm_config": R, "prompts": R, "audit": R, "health": R,
-            "tasks": R, "search": R,
+            "tasks": R, "search": R, "agents": R,
         }),
     },
     "security": {
@@ -78,7 +79,7 @@ ROLES = {
 # Módulos de permiso que llegaron en fases posteriores: se añaden a los roles de
 # serie que ya existían en la BD (solo si el rol no tiene ese módulo; no se
 # tocan los permisos que un administrador haya cambiado).
-LATER_MODULES = {"search"}
+LATER_MODULES = {"search", "copilot", "agents"}
 
 # Patrones de la primera capa del clasificador (Capítulo 13). Redacción propia.
 # Se aplican sobre el texto en minúsculas y sin tildes. Editables desde Admin.
@@ -190,6 +191,17 @@ LLM_SERVICES = [
      "Evaluación automática de una muestra de respuestas"),
     ("intent_classification", "claude-haiku-5-5", "claude-sonnet-5-5", 1000, "low", "intent.classify",
      "Segunda capa del clasificador de intención del asistente"),
+    # Copiloto y agentes (fase 5c). Cada agente indica su prompt; aquí va el del copiloto.
+    ("agent_copilot", "claude-sonnet-5-5", "claude-haiku-5-5", 8000, "low", "agent.copiloto",
+     "Copiloto y agentes con herramientas (un turno del bucle)"),
+    ("chat_summary", "claude-haiku-5-5", "claude-sonnet-5-5", 2000, "low", "chat.summary",
+     "Resumen de los turnos antiguos de una conversación"),
+    ("memory_extraction", "claude-haiku-5-5", None, 1500, "low", "memory.extract",
+     "Qué recordar de cada persona entre conversaciones"),
+    ("cv_tailoring", "claude-sonnet-5-5", "claude-haiku-5-5", 6000, "low", "cv.tailor",
+     "CV adaptado a una oportunidad"),
+    ("proposal_deck", "claude-haiku-5-5", "claude-sonnet-5-5", 4000, "low", "proposal.deck",
+     "Guion de la presentación PPTX de una propuesta"),
 ]
 
 # USD por millón de tokens (precio estándar publicado por Anthropic en la fecha
@@ -218,6 +230,32 @@ HUMAN_BASELINES = [
     ("document_enrichment", "Leer y catalogar un documento", 10),
     ("proposal_generation", "Redactar el primer borrador de una propuesta", 480),
     ("chat_rag", "Buscar una respuesta en la documentación", 15),
+    ("cv_tailoring", "Adaptar un CV a una propuesta", 45),
+]
+
+# Agentes de partida (Capítulo 15). Se editan y prueban en Admin -> Agentes.
+# slug, nombre, descripción, tipo, máx. iteraciones, máx. herramientas, herramientas [(nombre, nivel)]
+_READ = ["search_opportunities", "get_opportunity", "search_documents", "get_document", "search_clients",
+         "search_profiles", "get_proposal"]
+AGENTS = [
+    ("copiloto", "Copiloto", "Asistente general: busca, responde con los datos de la plataforma y propone acciones.",
+     "conversational", 10, 15,
+     [(t, "auto") for t in _READ] + [(t, "approve") for t in ("analyze_opportunity", "create_proposal",
+                                                               "generate_proposal", "generate_cv",
+                                                               "export_proposal")],
+     [{"input": "¿Qué oportunidades abiertas de ciberseguridad tenemos?", "expect_tools": ["search_opportunities"]}]),
+    ("analista_documental", "Analista documental",
+     "Estudia pliegos y oportunidades: requisitos, riesgos y decisión GO/NO-GO.", "specialist", 8, 12,
+     [("search_documents", "auto"), ("get_document", "auto"), ("get_opportunity", "auto"),
+      ("search_opportunities", "auto"), ("analyze_opportunity", "approve"), ("analyze_document", "approve")],
+     [{"input": "¿Qué solvencia técnica pide el pliego @doc:1?", "expect_tools": ["search_documents"]}]),
+    ("preparador_propuestas", "Preparador de propuestas",
+     "Monta la propuesta de una oportunidad: plantilla, redacción, equipo con CV a medida y paquete final.",
+     "specialist", 10, 15,
+     [("get_opportunity", "auto"), ("search_documents", "auto"), ("search_profiles", "auto"),
+      ("get_proposal", "auto"), ("list_proposal_templates", "auto"), ("create_proposal", "approve"),
+      ("generate_proposal", "approve"), ("generate_cv", "approve"), ("export_proposal", "approve")],
+     [{"input": "Prepara la propuesta para la oportunidad 1", "expect_tools": ["get_opportunity"]}]),
 ]
 
 PROMPT_SEEDS_DIR = Path(__file__).parent / "prompt_seeds"
@@ -225,7 +263,8 @@ PROMPT_SEEDS_DIR = Path(__file__).parent / "prompt_seeds"
 
 def run_seeds() -> dict[str, int]:
     created = {"apps": 0, "roles": 0, "llm_services": 0, "llm_pricing": 0, "service_lines": 0,
-               "proposal_templates": 0, "prompts": 0, "budgets": 0, "human_baselines": 0, "intent_patterns": 0}
+               "proposal_templates": 0, "prompts": 0, "budgets": 0, "human_baselines": 0, "intent_patterns": 0,
+               "agents": 0}
 
     apps = {a.code: a for a in db.session.scalars(db.select(App))}
     for code, name, description in APPS:
@@ -289,6 +328,7 @@ def run_seeds() -> dict[str, int]:
 
     created["prompts"] = _seed_prompts()
     created["intent_patterns"] = _seed_intent_patterns()
+    created["agents"] = _seed_agents()
 
     for scope, scope_id, daily, monthly in BUDGETS:
         if db.session.scalar(db.select(BudgetConfig.id).filter_by(scope=scope, scope_id=scope_id)) is None:
@@ -341,6 +381,25 @@ def _seed_intent_patterns() -> int:
     return created
 
 
+def _seed_agents() -> int:
+    from .agents import definitions
+
+    existing = set(db.session.scalars(db.select(AgentDefinition.slug)))
+    created = 0
+    for slug, name, description, agent_type, max_iterations, max_tool_calls, tools, test_cases in AGENTS:
+        if slug in existing:
+            continue
+        agent = AgentDefinition(slug=slug, name=name, description=description, status="active",
+                                agent_type=agent_type, llm_service_type="agent_copilot", prompt_name=f"agent.{slug}",
+                                max_iterations=max_iterations, max_tool_calls=max_tool_calls, test_cases=test_cases)
+        db.session.add(agent)
+        db.session.flush()
+        definitions.set_tools(agent, [{"tool_name": t, "approval_level": level} for t, level in tools])
+        definitions.save_version(agent, None, notes="Versión inicial")
+        created += 1
+    return created
+
+
 def _seed_prompts() -> int:
     """Primera versión de cada prompt. Si ya hay alguna versión, no se toca."""
     from .ai import prompts
@@ -354,6 +413,7 @@ def _seed_prompts() -> int:
         user_file = PROMPT_SEEDS_DIR / f"{name}.user.md"
         prompts.publish(name, system_file.read_text(encoding="utf-8").strip(),
                         user_file.read_text(encoding="utf-8").strip() if user_file.exists() else None,
-                        author_id=None, notes="Versión inicial", service_type=services.get(name))
+                        author_id=None, notes="Versión inicial",
+                        service_type=services.get(name) or ("agent_copilot" if name.startswith("agent.") else None))
         created += 1
     return created

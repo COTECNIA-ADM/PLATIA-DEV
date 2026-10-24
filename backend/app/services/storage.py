@@ -108,3 +108,10 @@ def save_upload(upload: FileStorage | None, subdir: str = "documents") -> Stored
 def delete_file(storage_path: str | None) -> None:
     if storage_path:
         absolute_path(storage_path).unlink(missing_ok=True)
+
+
+def save_bytes(content: bytes, filename: str, subdir: str) -> StoredFile:
+    """Guarda un fichero generado por la plataforma con las mismas comprobaciones."""
+    import io
+
+    return save_upload(FileStorage(io.BytesIO(content), filename=filename), subdir=subdir)

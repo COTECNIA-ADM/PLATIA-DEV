@@ -24,9 +24,10 @@ from ..api.common import iso, paginate, parse_body
 from ..api.schemas import BaselineIn, BudgetIn, PricingIn, PromptPreviewIn, PromptPublishIn, ServiceConfigPatch
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..extensions import db
-from ..models import (AuditAction, AuditLog, BudgetConfig, Document, HumanBaselineConfig, LLMModelPricing,
+from ..models import (AgentRun, AuditAction, AuditLog, BudgetConfig, ChatConversation, ChatMessage, Document,
+                      HumanBaselineConfig, LLMModelPricing,
                       LLMQualityScore, LLMServiceConfig, LLMUsageLog, Prompt, SearchQueryLog, TaskCompletionLog, User,
-                      utcnow)
+                      UserMemory, utcnow)
 from ..queue import PRIORITY_MAINTENANCE, enqueue
 from ..security.audit import audit
 from ..security.context import platform_guard, require_permission
@@ -472,6 +473,12 @@ def gdpr_export(user_id: int):
     ratings = db.session.scalars(db.select(LLMQualityScore).filter_by(reviewer_type="user", reviewer_id=user_id)).all()
     tasks = db.session.scalars(db.select(TaskCompletionLog).filter_by(user_id=user_id)).all()
     queries = db.session.scalars(db.select(SearchQueryLog).filter_by(user_id=user_id).order_by(SearchQueryLog.id)).all()
+    from ..agents import chat as chat_service
+    from ..agents import memory as memory_service
+
+    conversations = db.session.scalars(db.select(ChatConversation).filter_by(user_id=user_id)
+                                       .order_by(ChatConversation.id)).all()
+    runs = db.session.scalars(db.select(AgentRun).filter_by(user_id=user_id).order_by(AgentRun.id)).all()
     audit(AuditAction.GDPR_AI_EXPORT, "INFO", user_id=g.security.user_id, resource_type="users", resource_id=user_id)
     return jsonify({
         "user_id": user_id, "generated_at": iso(utcnow()),
@@ -482,6 +489,12 @@ def gdpr_export(user_id: int):
                    "created_at": iso(t.created_at)} for t in tasks],
         "search_queries": [{"channel": q.channel, "query": q.query_text, "intent": q.intent, "rating": q.user_rating,
                             "created_at": iso(q.created_at)} for q in queries],
+        "copilot_conversations": [{**chat_service.conversation_dict(c), "summary": c.summary,
+                                   "messages": [chat_service.message_dict(m) for m in c.messages]}
+                                  for c in conversations],
+        "copilot_memories": [memory_service.to_dict(m) for m in memory_service.ranked(user_id)],
+        "agent_runs": [{"run_id": r.run_uid, "status": r.status, "tool_calls": r.tool_calls or [],
+                        "created_at": iso(r.created_at)} for r in runs],
     })
 
 
@@ -505,8 +518,19 @@ def gdpr_erase(user_id: int):
     # Las consultas se conservan para las métricas del buscador, sin texto ni persona
     queries = db.session.execute(db.update(SearchQueryLog).where(SearchQueryLog.user_id == user_id)
                                  .values(user_id=None, query_text=None)).rowcount
+    # Copiloto: conversaciones y memoria se borran de verdad; de las ejecuciones queda la métrica sin persona
+    conv_ids = list(db.session.scalars(db.select(ChatConversation.id).filter_by(user_id=user_id)))
+    messages = db.session.execute(db.delete(ChatMessage).where(ChatMessage.conversation_id.in_(conv_ids))).rowcount \
+        if conv_ids else 0
+    conversations = db.session.execute(db.delete(ChatConversation).where(ChatConversation.user_id == user_id)).rowcount
+    memories = db.session.execute(db.delete(UserMemory).where(UserMemory.user_id == user_id)).rowcount
+    runs = db.session.execute(db.update(AgentRun).where(AgentRun.user_id == user_id)
+                              .values(user_id=None, conversation_id=None, state=None, pending=None)).rowcount
     db.session.commit()
     audit(AuditAction.GDPR_AI_ERASURE, "WARNING", user_id=g.security.user_id, resource_type="users",
-          resource_id=user_id, details={"llm_calls": calls, "ratings": ratings, "tasks": tasks, "search_queries": queries})
+          resource_id=user_id, details={"llm_calls": calls, "ratings": ratings, "tasks": tasks,
+                                        "search_queries": queries, "conversations": conversations,
+                                        "memories": memories})
     return jsonify({"user_id": user_id, "llm_calls": calls, "ratings": ratings, "tasks": tasks,
-                    "search_queries": queries})
+                    "search_queries": queries, "conversations": conversations, "messages": messages,
+                    "memories": memories, "agent_runs": runs})

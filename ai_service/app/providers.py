@@ -10,7 +10,8 @@ errores se traducen a ``ProviderError`` indicando si tiene sentido probar con el
 siguiente proveedor de la cadena.
 """
 import json
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 
 import anthropic
 import httpx
@@ -30,6 +31,28 @@ class ProviderResult:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    # Bloques completos de la respuesta (texto, tool_use y razonamiento con su firma):
+    # el bucle de herramientas del backend los devuelve tal cual en el turno siguiente
+    content: list[dict] = field(default_factory=list)
+
+
+OnText = Callable[[str], Awaitable[None]] | None
+
+_BLOCK_FIELDS = {
+    "text": ("type", "text"),
+    "tool_use": ("type", "id", "name", "input"),
+    "thinking": ("type", "thinking", "signature"),
+    "redacted_thinking": ("type", "data"),
+}
+
+
+def block_to_dict(block) -> dict | None:
+    """Bloque del SDK -> dict con solo los campos que la API acepta de vuelta."""
+    kind = getattr(block, "type", None)
+    fields = _BLOCK_FIELDS.get(kind)
+    if fields is None:
+        return None
+    return {f: getattr(block, f, None) for f in fields if getattr(block, f, None) is not None or f == "input"}
 
 
 class ProviderError(Exception):
@@ -63,7 +86,8 @@ class AnthropicProvider:
         return self._client
 
     async def complete(self, *, model: str, system: str, messages: list[dict], max_tokens: int,
-                       effort: str | None, json_schema: dict | None, timeout: float) -> ProviderResult:
+                       effort: str | None, json_schema: dict | None, timeout: float,
+                       tools: list[dict] | None = None, on_text: OnText = None) -> ProviderResult:
         if not self.configured:
             raise ProviderError("ANTHROPIC_API_KEY no está configurada", "not_configured")
         kwargs: dict = {
@@ -82,9 +106,16 @@ class AnthropicProvider:
             output_config["format"] = {"type": "json_schema", "schema": json_schema}
         if output_config:
             kwargs["output_config"] = output_config
+        if tools:
+            kwargs["tools"] = tools
         try:
-            # Siempre en streaming: evita los cortes por tiempo en respuestas largas
+            # Siempre en streaming: evita los cortes por tiempo en respuestas largas.
+            # Con on_text, el texto se reenvía según llega (chat del copiloto).
             async with self._get_client().messages.stream(**kwargs, timeout=timeout) as stream:
+                if on_text is not None:
+                    async for event in stream:
+                        if getattr(event, "type", None) == "text" and getattr(event, "text", ""):
+                            await on_text(event.text)
                 message = await stream.get_final_message()
         except anthropic.BadRequestError as exc:
             # Petición mal formada: el siguiente proveedor fallaría igual
@@ -106,6 +137,7 @@ class AnthropicProvider:
             output_tokens=usage.output_tokens or 0,
             cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
             cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            content=[b for b in (block_to_dict(x) for x in message.content) if b is not None],
         )
 
 
@@ -123,9 +155,14 @@ class OpenAICompatibleProvider:
         return bool(self._settings.fallback_base_url)
 
     async def complete(self, *, model: str, system: str, messages: list[dict], max_tokens: int,
-                       effort: str | None, json_schema: dict | None, timeout: float) -> ProviderResult:
+                       effort: str | None, json_schema: dict | None, timeout: float,
+                       tools: list[dict] | None = None, on_text: OnText = None) -> ProviderResult:
         if not self.configured:
             raise ProviderError("FALLBACK_LLM_BASE_URL no está configurada", "not_configured")
+        if tools or any(not isinstance(m.get("content"), str) for m in messages):
+            # El bucle de herramientas usa el formato de Anthropic: la reserva genérica
+            # no lo comparte, así que el agente no cambia de proveedor a mitad de tarea
+            raise ProviderError("El proveedor de reserva no admite herramientas", "no_tool_support")
         if json_schema:
             # Sin salida estructurada nativa común a todos: instrucción en el prompt
             # (portable) y el backend valida el resultado (Capítulo 11).
@@ -159,12 +196,16 @@ class OpenAICompatibleProvider:
         data = resp.json()
         choice = (data.get("choices") or [{}])[0]
         usage = data.get("usage") or {}
+        text = (choice.get("message") or {}).get("content") or ""
+        if on_text is not None and text:
+            await on_text(text)
         return ProviderResult(
-            text=(choice.get("message") or {}).get("content") or "",
+            text=text,
             model=data.get("model") or model,
             stop_reason=choice.get("finish_reason"),
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
+            content=[{"type": "text", "text": text}] if text else [],
         )
 
 

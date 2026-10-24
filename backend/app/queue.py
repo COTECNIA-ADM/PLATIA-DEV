@@ -29,6 +29,7 @@ TASK_ROUTES = {
     "tasks.documents.*": {"queue": "documents"},
     "tasks.proposals.*": {"queue": "documents"},
     "tasks.ai.*": {"queue": "ai"},
+    "tasks.agents.*": {"queue": "ai"},
     "tasks.sync.*": {"queue": "sync"},
     "tasks.search.*": {"queue": "sync"},
     "tasks.crm.*": {"queue": "crm"},
@@ -117,10 +118,15 @@ BEAT_SCHEDULE = {
         "task": "tasks.search.cleanup_query_log",
         "schedule": crontab(minute=50, hour=3),
     },
+    # --- Copiloto y agentes (fase 5c, Capítulos 14 y 15)
+    "agents-expire-approvals": {
+        "task": "tasks.agents.expire_approvals",
+        "schedule": crontab(minute="*/5"),
+    },
 }
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
-                "app.tasks.system", "app.tasks.ai", "app.tasks.search"]
+                "app.tasks.system", "app.tasks.ai", "app.tasks.search", "app.tasks.agents"]
 
 _flask_app: Flask | None = None
 

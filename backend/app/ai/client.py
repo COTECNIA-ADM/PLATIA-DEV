@@ -1,4 +1,5 @@
 """Cliente HTTP del servicio de IA (solo lo usa el backend, con X-API-Key)."""
+import json as json_lib
 from dataclasses import dataclass
 
 import requests
@@ -44,6 +45,46 @@ class AIServiceClient:
     # --- LLM
     def complete(self, payload: dict) -> dict:
         return self._request("POST", "/v1/complete", payload, timeout=payload.get("timeout_seconds", 180) + 20)
+
+    def stream(self, payload: dict):
+        """Como ``complete``, pero en streaming (SSE): genera los trozos de texto según
+        llegan y devuelve (``return``) la respuesta completa al terminar."""
+        headers = {"X-API-Key": self.api_key, "Accept": "text/event-stream"}
+        if has_request_context() and g.get("request_id"):
+            headers["X-Request-ID"] = g.request_id
+        timeout = payload.get("timeout_seconds", 180) + 20
+        try:
+            with requests.post(f"{self.base_url}/v1/stream", json=payload, headers=headers, stream=True,
+                               timeout=(10, timeout)) as resp:
+                if resp.status_code >= 300:
+                    try:
+                        body = resp.json()
+                    except ValueError:
+                        body = {}
+                    raise AIServiceError(str(body.get("detail") or f"HTTP {resp.status_code}"), resp.status_code,
+                                         body)
+                event = None
+                for raw in resp.iter_lines(decode_unicode=True):
+                    if not raw:
+                        continue
+                    if raw.startswith("event: "):
+                        event = raw[7:].strip()
+                        continue
+                    if not raw.startswith("data: "):
+                        continue
+                    data = json_lib.loads(raw[6:])
+                    if event == "delta":
+                        if data.get("text"):
+                            yield data["text"]
+                    elif event == "final":
+                        return data
+                    elif event == "error":
+                        raise AIServiceError(data.get("detail") or "Error del servicio de IA",
+                                             422 if data.get("rejected") else 503, data)
+        except requests.RequestException as exc:
+            log.warning("ai_service_unreachable", path="/v1/stream", error=type(exc).__name__)
+            raise AIServiceError("El servicio de IA no responde.") from exc
+        raise AIServiceError("La respuesta del servicio de IA se cortó.", 503, {})
 
     # --- Embeddings y RAG
     def similarity(self, queries: list[str], candidates: list[str], timeout: float = 10) -> list[list[float]]:

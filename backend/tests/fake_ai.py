@@ -5,6 +5,7 @@
 - La "búsqueda vectorial" puntúa por palabras en común y aplica los mismos
   filtros que Qdrant (vigencia, ids, tipos y control de acceso).
 """
+import copy
 import math
 import re
 
@@ -36,6 +37,16 @@ RESPONSES = {
     "rag_evaluation": {"faithfulness": 0.9, "relevance": 1, "completeness": 0.8, "hallucination": 0.1,
                        "issues": []},
     "proposal_generation": {"content": "Texto propuesto para la sección.", "assumptions": [], "sources": [1]},
+    "memory_extraction": {"memories": [{"category": "preference",
+                                        "content": "Prefiere respuestas breves en viñetas."}]},
+    "cv_tailoring": {"headline": "Arquitecta cloud para administraciones públicas",
+                     "summary": "Diez años diseñando plataformas en la nube para el sector público.",
+                     "skills": ["Kubernetes", "Blockchain cuántico", "AWS"],
+                     "experiences": [{"index": 0, "description": "Migró 40 servicios a contenedores."},
+                                     {"index": 7, "description": "Experiencia inventada."}],
+                     "fit_notes": "Encaja en cloud; le falta ENS."},
+    "proposal_deck": {"slides": [{"title": "Nuestra propuesta", "bullets": ["Equipo experto", "Plazo de 12 meses"],
+                                  "notes": "Presentar el enfoque."}]},
 }
 
 
@@ -54,7 +65,11 @@ def _cosine(a: dict, b: dict) -> float:
 
 
 class FakeAIClient:
+    """``agent_turns``: respuestas del modelo para los turnos con herramientas, en orden.
+    Cada una es un texto o ``{"text": ..., "tools": [(nombre, entrada), ...]}``."""
+
     def __init__(self):
+        self.agent_turns: list = []
         self.calls: list[dict] = []
         self.responses = {k: dict(v) for k, v in RESPONSES.items()}
         self.down = False  # True: el servicio no responde
@@ -67,15 +82,47 @@ class FakeAIClient:
             raise AIServiceError("El servicio de IA no responde.")
 
     # --- LLM
-    def complete(self, payload: dict) -> dict:
-        self.calls.append(payload)
-        self._check()
+    def _agent_turn(self, payload: dict) -> dict:
+        turn = self.agent_turns.pop(0) if self.agent_turns else "Hecho."
+        if isinstance(turn, str):
+            turn = {"text": turn}
+        content = [{"type": "thinking", "thinking": "", "signature": "firma"}]
+        if turn.get("text"):
+            content.append({"type": "text", "text": turn["text"]})
+        for i, (name, tool_input) in enumerate(turn.get("tools") or []):
+            content.append({"type": "tool_use", "id": f"toolu_{len(self.calls)}_{i}", "name": name,
+                            "input": tool_input})
+        stop = "tool_use" if turn.get("tools") else turn.get("stop_reason", "end_turn")
         target = payload["targets"][0]
-        data = self.responses.get(payload["service_type"], {"answer": "ok"})
+        attempt = {"provider": target["provider"], "model": target["model"], "success": True,
+                   "input_tokens": self.input_tokens, "output_tokens": self.output_tokens, "latency_ms": 40,
+                   "stop_reason": stop}
+        return {"text": turn.get("text") or "", "data": None, "content": content, "provider": target["provider"],
+                "model": target["model"], "attempts": [attempt], "is_fallback": False, "stop_reason": stop}
+
+    def stream(self, payload: dict):
+        body = self.complete(payload)
+        for word in (body.get("text") or "").split(" "):
+            if word:
+                yield word + " "
+        return body
+
+    def complete(self, payload: dict) -> dict:
+        self.calls.append(copy.deepcopy(payload))  # el servicio real lo serializa al enviarlo
+        self._check()
+        if "tools" in payload or payload["service_type"] == "agent_copilot":
+            return self._agent_turn(payload)
+        target = payload["targets"][0]
+        if payload["service_type"] == "chat_summary":
+            data = None
+            text = "- La persona busca oportunidades de ciberseguridad."
+        else:
+            data = self.responses.get(payload["service_type"], {"answer": "ok"})
+            text = str(data)
         attempt = {"provider": target["provider"], "model": target["model"], "success": True,
                    "input_tokens": self.input_tokens, "output_tokens": self.output_tokens, "latency_ms": 40,
                    "stop_reason": "end_turn"}
-        return {"text": str(data), "data": data, "provider": target["provider"], "model": target["model"],
+        return {"text": text, "data": data, "provider": target["provider"], "model": target["model"],
                 "attempts": [attempt], "is_fallback": False, "stop_reason": "end_turn"}
 
     # --- Embeddings

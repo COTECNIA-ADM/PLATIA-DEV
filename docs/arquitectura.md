@@ -76,7 +76,9 @@ sequenceDiagram
 ```
 
 El backend nunca espera a Claude. Para el chat, donde el usuario quiere ver la respuesta
-mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service`.
+mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service` y lleva
+el bucle del agente: ejecuta las herramientas con los permisos de la persona y se para a
+pedir aprobación antes de cambiar nada (ADR-013).
 
 ## Crecimiento previsto
 
@@ -85,6 +87,6 @@ mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service
 | Núcleo de 8 contenedores | Fase 0 (hecho) | Base mínima que permite crecer sin reescribir |
 | `celery_beat` | Fase 4 (hecho) | Tareas periódicas: limpieza RGPD, escaneo de datos personales, alertas |
 | Workers por cola (`celery_default`, `celery_ai`) | Fase 4 (hecho) | Las tareas de IA no deben competir con las de documentos |
-| `meilisearch` | Fase 5b | Búsqueda textual rápida de oportunidades y documentos |
+| `meilisearch` | Fase 5b (hecho) | Búsqueda textual rápida de oportunidades y documentos |
 | `analytics_frontend`, `admin_frontend` | Fase 6 | Audiencias y despliegues distintos |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |

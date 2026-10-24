@@ -109,10 +109,10 @@ def test_premium_needs_technical_and_executive_and_four_eyes(client, as_role):
     assert _review(client, tech, p, "technical").status_code == 422  # repetida
     resp = _review(client, exec_, p, "executive")
     assert resp.json["status"] == "approved"
-    # Al aprobarse se genera el paquete (DOCX) y se avisa al responsable
-    generated = db.session.scalars(db.select(ProposalAttachment).filter_by(proposal_id=p["id"],
-                                                                           kind="generated")).all()
-    assert len(generated) == 1 and generated[0].filename.endswith(".docx")
+    # Al aprobarse se genera el paquete (DOCX, PDF y PPTX) y se avisa al responsable
+    generated = db.session.scalars(db.select(ProposalAttachment).filter_by(proposal_id=p["id"], kind="generated")
+                                   .order_by(ProposalAttachment.id)).all()
+    assert [a.filename.rsplit(".", 1)[1] for a in generated] == ["docx", "pdf", "pptx"]
     note = db.session.scalar(db.select(Notification).filter_by(user_id=uid(owner),
                                                                notification_type="REPORT_READY"))
     assert note.link == f"/proposals/{p['id']}"
