@@ -20,6 +20,7 @@ from ..extensions import db
 from ..models import App, AppRole, AuditAction, User, UserAppMembership
 from .audit import audit
 from .redis_store import get_redis
+from .registry import check as check_registered
 
 log = structlog.get_logger(__name__)
 DEFAULT_APP = "operations"
@@ -128,6 +129,8 @@ def platform_guard(fn):
 
 
 def require_permission(module: str, action: str):
+    check_registered(module, action)  # falla al importar si el permiso no existe
+
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):

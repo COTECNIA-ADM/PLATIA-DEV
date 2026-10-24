@@ -5,8 +5,8 @@
 | 0 | Preparación y núcleo | Estructura, `.env`, docker-compose de 8 contenedores, health checks | 1–3, Ap. F | Hecha |
 | 1 | Requisitos y arquitectura | `docs/requisitos.md`, `docs/arquitectura.md` y `docs/adr/` | 4 | Hecha |
 | 2 | Base de datos | Modelos SQLAlchemy en 3 esquemas, Alembic, borrado lógico y auditoría | 5, Ap. A | Hecha |
-| 3 | Seguridad e IAM | JWT con refresh, MFA, roles por aplicación, cabeceras OWASP, rate limiting | 6 | En curso |
-| 4 | Backend | Blueprints de negocio, colas Celery, tareas programadas, servicios de negocio | 7–10, Ap. B | Pendiente |
+| 3 | Seguridad e IAM | JWT con refresh, MFA, roles por aplicación, cabeceras OWASP, rate limiting | 6 | Hecha |
+| 4 | Backend | Blueprints de negocio, colas Celery, tareas programadas, servicios de negocio | 7–10, Ap. B | En revisión |
 | 5 | IA | Factoría multi-proveedor, prompts en BD, costes, RAG, agente con herramientas, chat SSE | 11–15, Ap. C y E | Pendiente |
 | 6 | Frontend | App principal completa; después analytics y admin | 16–17 | Pendiente |
 | 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
@@ -15,8 +15,8 @@
 
 ## Del núcleo mínimo a los 17 servicios del libro
 
-Se añadirán cuando la fase lo necesite: Meilisearch, `celery_beat`, workers separados
-por cola (`celery_default`, `celery_ai`, `celery_automation`), frontales de analytics y
+Ya están: `celery_default`, `celery_ai` y `celery_beat` (fase 4). Se añadirán cuando la
+fase lo necesite: Meilisearch, `celery_automation`, frontales de analytics y
 admin, y Selenium Grid con 3 nodos de Chrome en una red `rpa_net` aislada.
 
 ## Diferencias deliberadas con el libro
@@ -24,3 +24,12 @@ admin, y Selenium Grid con 3 nodos de Chrome en una red `rpa_net` aislada.
 - Una sola instancia de MySQL con 3 esquemas (el libro usa 3 instancias en producción).
 - Modelos de Claude actualizados a la generación vigente (`claude-sonnet-5-5`,
   `claude-opus-5-5`, `claude-haiku-5-5`); se cambian en `.env`.
+
+## Qué queda de los capítulos 7–10 para fases posteriores
+
+- Análisis de documentos con IA, clasificación con Haiku, generación de secciones y CV a
+  medida, similitud semántica en la puntuación de oportunidades: fase 5.
+- PDF y PPTX del paquete de propuesta: fase 5 (en la fase 4 se genera el DOCX).
+- Correo de notificaciones de prioridad alta: fase 8 (SMTP).
+- Integración con CRM (OAuth2) y bots RPA con Selenium (capítulo 10): cuando haya un CRM y
+  un portal reales contra los que probar; las colas `crm` y `automation` ya existen.

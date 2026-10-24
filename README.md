@@ -3,7 +3,8 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 0, núcleo mínimo** (8 contenedores). El plan completo está en
+Estado actual: **fase 4, backend de negocio** (10 contenedores): APIs de clientes,
+oportunidades, documentos y propuestas, colas Celery y tareas programadas. El plan completo está en
 [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido
@@ -39,8 +40,11 @@ Más en [docs/seguridad.md](docs/seguridad.md).
 git checkout main
 git pull
 python scripts/generate_env.py --actualizar   # añade a .env las variables nuevas
-docker compose up -d --build --force-recreate
+docker compose up -d --build --force-recreate --remove-orphans
 ```
+
+`--remove-orphans` borra los contenedores que ya no existen en esta fase (en la fase 4,
+`celery_worker` se divide en `celery_default`, `celery_ai` y `celery_beat`).
 
 Al arrancar, el contenedor `migrations` crea las tablas de los tres esquemas y carga los
 datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía en
@@ -57,7 +61,16 @@ datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía e
 4. En Windows, el repositorio fuerza finales de línea LF (`.gitattributes`). Si clonaste
    antes de que existiera ese fichero, clona de nuevo.
 
-## Contenedores del núcleo
+## Probar la API de negocio
+
+```bash
+python scripts/demo_fase4.py --email tu@empresa.com
+```
+
+Recorre el flujo completo (cliente, oportunidad, documento, propuesta con revisiones y
+paquete DOCX). Referencia de la API en [docs/api.md](docs/api.md).
+
+## Contenedores
 
 | Servicio | Imagen | Red | Función |
 | --- | --- | --- | --- |
@@ -66,7 +79,9 @@ datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía e
 | qdrant | qdrant/qdrant | data | Vectores para RAG |
 | backend | build `backend/` | backend + data | API Flask |
 | ai_service | build `ai_service/` | backend + data | Servicio de IA (FastAPI + Claude) |
-| celery_worker | build `backend/` | backend + data | Tareas en segundo plano |
+| celery_default | build `backend/` | backend + data | Colas rápidas: alertas, tareas generales y sincronización |
+| celery_ai | build `backend/` | backend + data | Colas lentas: documentos e IA |
+| celery_beat | build `backend/` | data | Tareas programadas (alertas, limpieza RGPD, salud) |
 | frontend | build `frontend/` | frontend | App React principal |
 | nginx | nginx:1.27 | frontend + backend | Proxy inverso, único puerto publicado |
 | migrations | build `backend/` | data | Un solo uso: migraciones Alembic y datos iniciales |

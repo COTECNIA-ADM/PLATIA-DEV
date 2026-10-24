@@ -7,6 +7,7 @@ from .core import (
     AppRole,
     AuditAction,
     AuditLog,
+    FailedTask,
     LLMModelPricing,
     LLMQualityScore,
     LLMServiceConfig,
@@ -30,8 +31,10 @@ from .operations import (
     Project,
     Proposal,
     ProposalAttachment,
+    ProposalReview,
     ProposalSection,
     ProposalTemplate,
+    ServiceLine,
 )
 
 __all__ = [name for name in dir() if name[0].isupper()] + ["utcnow"]

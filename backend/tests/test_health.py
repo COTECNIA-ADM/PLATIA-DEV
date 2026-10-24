@@ -38,8 +38,8 @@ def test_full_health_denied_without_health_permission(client, make_user, login):
 
 def test_full_health_lists_every_core_service(client, admin_headers):
     with patch("app.routes.health.redis.Redis.from_url"), patch(
-        "app.routes.health.requests.get"
-    ) as get:
+        "app.routes.health._check_workers", return_value=None
+    ), patch("app.routes.health.requests.get") as get:
         get.return_value.json.return_value = {"status": "healthy"}
         resp = client.get("/api/health/full", headers=admin_headers)
     names = [s["name"] for s in resp.json["services"]]
@@ -50,14 +50,15 @@ def test_full_health_lists_every_core_service(client, admin_headers):
         "redis",
         "qdrant",
         "ai_service",
+        "workers",
     ]
     assert resp.status_code == 200
 
 
 def test_full_health_degraded_when_ai_has_no_anthropic_key(client, admin_headers):
     with patch("app.routes.health.redis.Redis.from_url"), patch(
-        "app.routes.health.requests.get"
-    ) as get:
+        "app.routes.health._check_workers", return_value=None
+    ), patch("app.routes.health.requests.get") as get:
         get.return_value.json.return_value = {"status": "degraded"}
         resp = client.get("/api/health/full", headers=admin_headers)
     assert resp.status_code == 200
@@ -79,3 +80,21 @@ def test_missing_env_vars_fail_fast(monkeypatch):
     monkeypatch.delenv("DB_PASSWORD", raising=False)
     with pytest.raises(RuntimeError, match="DB_PASSWORD"):
         Config()
+
+
+def test_full_health_degraded_without_workers(client, admin_headers):
+    with patch("app.routes.health.redis.Redis.from_url"), patch(
+        "app.queue.celery.control.ping", return_value=[]
+    ), patch("app.routes.health.requests.get") as get:
+        get.return_value.json.return_value = {"status": "healthy"}
+        resp = client.get("/api/health/full", headers=admin_headers)
+    workers = next(s for s in resp.json["services"] if s["name"] == "workers")
+    assert resp.status_code == 200 and workers["status"] == "degraded"
+
+
+def test_internal_errors_do_not_leak_details(client, admin_headers):
+    with patch("app.routes.health._check_database", side_effect=RuntimeError("secreto: /etc/db")):
+        resp = client.get("/api/health/full", headers=admin_headers)
+    assert resp.status_code == 500
+    assert "secreto" not in resp.get_data(as_text=True)
+    assert resp.json["error"] == "Error interno del servidor."

@@ -133,6 +133,18 @@ class AuditAction:
     ROLE_ASSIGNED = "ROLE_ASSIGNED"
     USER_CREATED = "USER_CREATED"
     USER_DEACTIVATED = "USER_DEACTIVATED"
+    # Datos de negocio (fase 4)
+    RECORD_CREATED = "RECORD_CREATED"
+    RECORD_UPDATED = "RECORD_UPDATED"
+    RECORD_DELETED = "RECORD_DELETED"
+    OPPORTUNITY_STATUS_CHANGED = "OPPORTUNITY_STATUS_CHANGED"
+    PROPOSAL_STATUS_CHANGED = "PROPOSAL_STATUS_CHANGED"
+    PROPOSAL_REVIEWED = "PROPOSAL_REVIEWED"
+    DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
+    DOCUMENT_DOWNLOADED = "DOCUMENT_DOWNLOADED"
+    DATA_EXPORTED = "DATA_EXPORTED"
+    TASK_FAILED = "TASK_FAILED"
+    TASK_REQUEUED = "TASK_REQUEUED"
 
 
 class AuditLog(db.Model):
@@ -178,6 +190,34 @@ class UserSession(db.Model):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
     revocation_reason: Mapped[str | None] = mapped_column(String(50))
+
+
+# ---------------------------------------------------------------- Colas (Cap. 8)
+class FailedTask(TimestampMixin, db.Model):
+    """Dead-letter queue: tareas que agotaron sus reintentos.
+
+    Se guardan en MySQL y no en Redis para que sobrevivan a reinicios. El equipo
+    de operaciones las revisa (reviewed) y puede reencolarlas desde Admin.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "failed_tasks"
+    __table_args__ = (Index("ix_failed_tasks_reviewed_failed", "reviewed", "failed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    task_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    queue: Mapped[str | None] = mapped_column(String(50))
+    error_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    task_args: Mapped[list | None] = mapped_column(JSON)
+    task_kwargs: Mapped[dict | None] = mapped_column(JSON)
+    retries: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    requeued_task_id: Mapped[str | None] = mapped_column(String(255))
 
 
 # ---------------------------------------------------------------- Gobernanza IA (Cap. 11)

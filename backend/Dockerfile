@@ -11,7 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Usuario sin privilegios: el contenedor no corre como root
-RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app \
+    && mkdir -p /data/documents && chown app:app /data/documents
 USER app
 
 EXPOSE 5000

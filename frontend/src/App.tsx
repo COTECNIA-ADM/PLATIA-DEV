@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   redis: 'Redis',
   qdrant: 'Qdrant',
   ai_service: 'Servicio de IA',
+  workers: 'Workers de Celery',
 }
 
 // El estado completo de la infraestructura solo lo ve quien tiene acceso a la app admin
