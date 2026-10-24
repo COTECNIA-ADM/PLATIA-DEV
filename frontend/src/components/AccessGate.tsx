@@ -5,6 +5,7 @@ import { Route, Routes } from 'react-router'
 import { getAppCode } from '../lib/api'
 import { APPS, type AppCode } from '../lib/apps'
 import { useAuth } from '../lib/auth'
+import BrandMark from './BrandMark'
 import Login from '../pages/Login'
 import { Empty, Spinner } from './ui'
 
@@ -21,7 +22,7 @@ function NoAccess() {
     <div className="login">
       <div className="login-card">
         <div className="brand brand-large">
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>PLATIA</span>
         </div>
         <p className="notice notice-warning">Tu usuario no tiene acceso a {app.name}.</p>

@@ -468,18 +468,18 @@ input[type='radio'] {
   padding: 4px 8px 16px;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 800;
 }
 .brand-large {
   font-size: 1.4rem;
   padding: 0 0 4px;
+}
+.brand-large .brand-mark {
+  width: 40px;
+  height: 40px;
 }
 .sidebar nav {
   display: flex;

@@ -5,6 +5,7 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import { getAppCode } from '../lib/api'
 import { APPS, userApps } from '../lib/apps'
 import { useAuth } from '../lib/auth'
+import BrandMark from './BrandMark'
 
 export type NavItem = { to: string; label: string; icon: string; module?: string; ai?: string; end?: boolean }
 
@@ -53,7 +54,7 @@ export default function Shell({ nav, topbar }: { nav: NavItem[]; topbar?: ReactN
     <div className={`shell${menuOpen ? ' shell-menu-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>
             PLATIA
             {code !== 'operations' && <small className="brand-app">{APPS[code as keyof typeof APPS]?.name}</small>}
