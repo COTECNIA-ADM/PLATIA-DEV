@@ -3,12 +3,13 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 6a, aplicación de operaciones** (11 contenedores). En
-http://localhost:8080 ya está la aplicación con la que se trabaja a diario: panel de inicio,
-oportunidades con filtros y relevancia, documentos con subida por arrastre y preguntas a la
-IA, propuestas con redacción, revisión y paquete final, el copiloto con streaming y
-aprobación, búsqueda con asistente, clientes, talento y avisos. Cada persona ve solo lo que
-su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el copiloto (5c). El plan
+Estado actual: **fase 6b, analítica y administración** (11 contenedores). En
+http://localhost:8080 está la aplicación de operaciones (oportunidades, documentos,
+propuestas, copiloto, búsqueda, clientes, talento y avisos); en `/analytics/`, el cuadro de
+mando de negocio y el valor de la IA; y en `/admin/`, usuarios y roles, modelos y costes de
+IA, prompts, agentes, búsqueda, tareas y auditoría. Cada persona ve solo las aplicaciones y
+funciones que su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el
+copiloto (5c). El plan
 completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido

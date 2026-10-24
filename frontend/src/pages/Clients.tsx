@@ -3,23 +3,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { fmtRelative } from '../lib/format'
+import { SECTORS, fmtRelative } from '../lib/format'
+
+export { SECTORS }
 import type { Client, ClientSummary, Page } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Modal, Pager, Spinner, errorMessage, useDebounced } from '../components/ui'
 
 export const SEGMENTS: Record<string, string> = { A: 'A · estratégico', B: 'B · recurrente', C: 'C · ocasional' }
 export const RISK: Record<string, string> = { low: 'Bajo', medium: 'Medio', high: 'Alto' }
-export const SECTORS: Record<string, string> = {
-  public: 'Sector público',
-  health: 'Sanidad',
-  finance: 'Banca y seguros',
-  energy: 'Energía',
-  industry: 'Industria',
-  retail: 'Comercio',
-  telecom: 'Telecomunicaciones',
-  education: 'Educación',
-  other: 'Otro',
-}
 
 export function ClientForm({ client, onClose, onSaved }: { client?: Client; onClose: () => void; onSaved: (c: Client) => void }) {
   const [form, setForm] = useState({

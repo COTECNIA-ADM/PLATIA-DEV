@@ -168,6 +168,7 @@ def create_opportunity():
         with db.session.no_autoflush:
             db.session.add(opp)
             service.score_opportunity(opp)
+            service.record_status(opp, None, g.security.user_id)
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
@@ -238,7 +239,7 @@ def change_status(opp_id: int):
     ensure_can_modify("opportunities", opp)
     data = parse_body(StatusChange)
     check_version(opp, data.version)
-    previous = service.change_status(opp, data.status, data.comment)
+    previous = service.change_status(opp, data.status, data.comment, g.security.user_id)
     db.session.commit()
     audit(AuditAction.OPPORTUNITY_STATUS_CHANGED, user_id=g.security.user_id,
           resource_type="opportunities", resource_id=opp.id,

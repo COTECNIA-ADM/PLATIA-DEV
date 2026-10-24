@@ -7,7 +7,16 @@
 
 let accessToken: string | null = null
 let refreshing: Promise<boolean> | null = null
-export const APP_CODE = 'operations'
+// Cada aplicación (operaciones, analítica, admin) fija la suya al arrancar
+let appCode = 'operations'
+
+export function setAppCode(code: string) {
+  appCode = code
+}
+
+export function getAppCode(): string {
+  return appCode
+}
 
 export function setAccessToken(token: string | null) {
   accessToken = token
@@ -67,7 +76,7 @@ function buildUrl(path: string, query?: Options['query']) {
 }
 
 async function send(path: string, options: Options): Promise<Response> {
-  const headers: Record<string, string> = { 'X-App-Code': options.app ?? APP_CODE }
+  const headers: Record<string, string> = { 'X-App-Code': options.app ?? appCode }
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
   return fetch(buildUrl(path, options.query), {

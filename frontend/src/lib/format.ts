@@ -68,6 +68,18 @@ export const OPPORTUNITY_STATUS: Record<string, string> = {
   discarded: 'Descartada',
 }
 
+export const SECTORS: Record<string, string> = {
+  public: 'Sector público',
+  health: 'Sanidad',
+  finance: 'Banca y seguros',
+  energy: 'Energía',
+  industry: 'Industria',
+  retail: 'Comercio',
+  telecom: 'Telecomunicaciones',
+  education: 'Educación',
+  other: 'Otro',
+}
+
 export const PHASES: Record<string, string> = {
   F1: 'F1 · Detección',
   F2: 'F2 · Cualificación',

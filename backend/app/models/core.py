@@ -72,7 +72,7 @@ class App(TimestampMixin, db.Model):
     roles: Mapped[list["AppRole"]] = relationship(back_populates="app")
 
 
-class AppRole(TimestampMixin, db.Model):
+class AppRole(VersionedMixin, TimestampMixin, db.Model):
     """Rol dentro de una aplicación, con permisos granulares en JSON."""
 
     __bind_key__ = BIND
@@ -131,8 +131,12 @@ class AuditAction:
     ACCESS_DENIED = "ACCESS_DENIED"
     RATE_LIMITED = "RATE_LIMITED"
     ROLE_ASSIGNED = "ROLE_ASSIGNED"
+    ROLE_REVOKED = "ROLE_REVOKED"
+    ROLE_PERMISSIONS_CHANGED = "ROLE_PERMISSIONS_CHANGED"
     USER_CREATED = "USER_CREATED"
     USER_DEACTIVATED = "USER_DEACTIVATED"
+    USER_REACTIVATED = "USER_REACTIVATED"
+    MFA_RESET_BY_ADMIN = "MFA_RESET_BY_ADMIN"
     # Datos de negocio (fase 4)
     RECORD_CREATED = "RECORD_CREATED"
     RECORD_UPDATED = "RECORD_UPDATED"

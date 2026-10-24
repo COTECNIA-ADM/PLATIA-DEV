@@ -149,6 +149,27 @@ class Opportunity(VersionedMixin, BusinessMixin, db.Model):
         return self.STATUS_PHASE.get(self.status, "F1")
 
 
+class OpportunityStatusChange(BusinessMixin, db.Model):
+    """Historial de estados de una oportunidad (fase 6b).
+
+    Se inserta y no se edita: de aquí salen las fechas reales de ganada o perdida y
+    la fase más avanzada a la que llegó cada oportunidad (embudo de conversión).
+    ``created_at`` es el momento del cambio y ``created_by`` quién lo hizo.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "opportunity_status_changes"
+    __table_args__ = (Index("ix_opportunity_status_changes_to_created", "to_status", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id"), nullable=False, index=True)
+    from_status: Mapped[str | None] = mapped_column(String(30))
+    to_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(500))
+
+    opportunity: Mapped[Opportunity] = relationship()
+
+
 # ---------------------------------------------------------------- Documentos
 class Document(VersionedMixin, BusinessMixin, db.Model):
     """Documento con versionado y enriquecimiento por IA."""

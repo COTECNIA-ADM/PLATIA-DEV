@@ -45,6 +45,10 @@ no responde y el plan B en MySQL está desactivado. Los errores de IA añaden lo
 | Copiloto | `GET/POST /copilot/conversations`, `GET/PATCH/DELETE /copilot/conversations/{id}`, `POST /copilot/conversations/{id}/messages` (SSE; `content` máx. 4.000, `opportunity_id`, `document_ids`), `POST /copilot/runs/{run_id}/approval` (SSE; `approve`, `comment`), `GET /copilot/runs/{run_id}`, `GET/POST/DELETE /copilot/memories`, `PATCH/DELETE /copilot/memories/{id}`, `GET /copilot/export` | `copilot` + `copilot_chat` |
 | Agentes (admin) | `GET /admin/agents/tools`, `GET/POST /admin/agents`, `GET/PATCH /admin/agents/{id}`, `PUT /admin/agents/{id}/tools`, `GET /admin/agents/{id}/versions`, `POST /admin/agents/{id}/versions/{n}/restore`, `POST /admin/agents/{id}/test` (`input`, `expect_tools`), `GET /admin/agents/{id}/metrics?days=`, `GET /admin/agents/runs` | `agents` |
 | Colas (admin) | `GET /admin/tasks/queues`, `GET /admin/tasks/failed`, `POST /admin/tasks/failed/{id}/review`, `POST /admin/tasks/failed/{id}/retry` | `tasks` |
+| Analítica | `GET /analytics/overview?months=&service_line=&sector=` (indicadores, embudo, evolución mensual, por línea y sector, mapa sector × línea, clientes y propuestas), `GET /analytics/ai?months=` (ahorro y coste de la IA por mes). Solo con `X-App-Code: analytics` | `dashboards.read` |
+| Usuarios (admin) | `GET /admin/users` (`q`, `status=active\|inactive`, `app`; `items` + `pagination`), `POST /admin/users`, `GET /admin/users/{id}`, `PUT/DELETE /admin/users/{id}/memberships/{app}` (`role`), `POST /admin/users/{id}/deactivate`, `.../reactivate`, `.../mfa/reset` | `users`, `roles` |
+| Roles (admin) | `GET /admin/apps` (aplicaciones con módulos, acciones y roles), `PATCH /admin/roles/{id}` (`version`, `permissions`) | `roles` |
+| Auditoría (admin) | `GET /admin/audit` (`action`, `severity`, `user_id`, `days`; `items` + `pagination`), `GET /admin/audit/actions` | `audit` |
 
 ## Flujos
 

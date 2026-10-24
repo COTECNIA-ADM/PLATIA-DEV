@@ -1,9 +1,7 @@
-import { lazy, Suspense } from 'react'
+import { lazy } from 'react'
 import { Route, Routes } from 'react-router'
 import Layout from './components/Layout'
-import { Empty, Spinner } from './components/ui'
-import { useAuth } from './lib/auth'
-import Login from './pages/Login'
+import AccessGate, { NotFound } from './components/AccessGate'
 
 // Cada pantalla se carga cuando se abre: el primer arranque descarga menos código
 const Home = lazy(() => import('./pages/Home'))
@@ -23,25 +21,9 @@ const Search = lazy(() => import('./pages/Search'))
 const Account = lazy(() => import('./pages/Account'))
 const Health = lazy(() => import('./pages/Health'))
 
-function NotFound() {
-  return <Empty title="Esta página no existe">Vuelve al inicio desde el menú.</Empty>
-}
-
 export default function App() {
-  const { user, loading } = useAuth()
-  if (loading) return <Spinner label="Recuperando la sesión…" />
-  if (!user) {
-    return (
-      <Suspense fallback={<Spinner />}>
-        <Routes>
-          <Route path="status" element={<div className="content"><Health /></div>} />
-          <Route path="*" element={<Login />} />
-        </Routes>
-      </Suspense>
-    )
-  }
   return (
-    <Suspense fallback={<Spinner />}>
+    <AccessGate>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Home />} />
@@ -64,6 +46,6 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
-    </Suspense>
+    </AccessGate>
   )
 }

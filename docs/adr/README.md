@@ -20,3 +20,4 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [012](ADR-012-busqueda-e-intencion.md) | Búsqueda con Meilisearch sincronizada desde MySQL y clasificador de intención en dos capas | Aceptado |
 | [013](ADR-013-copiloto-y-agentes.md) | Copiloto con agentes en el backend, catálogo cerrado de herramientas, aprobación humana y memoria editable | Aceptado |
 | [014](ADR-014-frontal-operaciones.md) | Frontal de operaciones con sesión en memoria, React Query y permisos desde `/me` | Aceptado |
+| [015](ADR-015-analitica-y-administracion.md) | Analítica y administración como tres aplicaciones en un solo frontal, con historial de estados | Aceptado |

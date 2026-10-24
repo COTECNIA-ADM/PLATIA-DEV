@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { api } from '../lib/api'
+import { api, getAppCode } from '../lib/api'
+import { APPS, type AppCode } from '../lib/apps'
 import { useAuth } from '../lib/auth'
 import { errorMessage } from '../components/ui'
 
@@ -41,7 +42,10 @@ export default function Login() {
           <span className="brand-mark">P</span>
           <span>PLATIA</span>
         </div>
-        <p className="muted">Oportunidades, documentos y propuestas con IA.</p>
+        <p className="muted">
+          {getAppCode() !== 'operations' && <strong>{APPS[getAppCode() as AppCode].name} · </strong>}
+          {APPS[getAppCode() as AppCode].tagline}
+        </p>
         {expired && !error && <p className="notice notice-warning">Tu sesión ha caducado. Vuelve a entrar.</p>}
         {mfaToken ? (
           <label className="field">
