@@ -45,6 +45,8 @@ RESPONSES = {
                      "experiences": [{"index": 0, "description": "Migró 40 servicios a contenedores."},
                                      {"index": 7, "description": "Experiencia inventada."}],
                      "fit_notes": "Encaja en cloud; le falta ENS."},
+    "analytics_qa": {"answer": "La cartera abierta es de **20.000 €**, toda en Datos e IA.",
+                     "sufficient_data": True},
     "proposal_deck": {"slides": [{"title": "Nuestra propuesta", "bullets": ["Equipo experto", "Plazo de 12 meses"],
                                   "notes": "Presentar el enfoque."}]},
 }

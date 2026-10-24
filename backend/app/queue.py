@@ -36,6 +36,7 @@ TASK_ROUTES = {
     "tasks.automation.*": {"queue": "automation"},
     "tasks.alerts.*": {"queue": "priority"},
     "tasks.notifications.*": {"queue": "default"},
+    "tasks.analytics.*": {"queue": "default"},
     "tasks.system.*": {"queue": "default"},
 }
 
@@ -127,11 +128,20 @@ BEAT_SCHEDULE = {
         "task": "tasks.agents.expire_approvals",
         "schedule": crontab(minute="*/5"),
     },
+    # --- Inteligencia comercial (fase 9a, Capítulo 23)
+    "analytics-pipeline-snapshot": {
+        "task": "tasks.analytics.take_snapshot",
+        "schedule": crontab(minute=50, hour=23),
+    },
+    "analytics-heatmap": {
+        "task": "tasks.analytics.compute_heatmap",
+        "schedule": crontab(minute=15, hour=2),
+    },
 }
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
                 "app.tasks.system", "app.tasks.ai", "app.tasks.search", "app.tasks.agents",
-                "app.tasks.notifications"]
+                "app.tasks.notifications", "app.tasks.analytics"]
 
 _flask_app: Flask | None = None
 

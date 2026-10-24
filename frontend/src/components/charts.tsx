@@ -240,20 +240,28 @@ export function BarList({
   )
 }
 
-/** Mapa de calor: filas x columnas, intensidad de un solo tono según el valor. */
+/** Mapa de calor: filas x columnas, intensidad de un solo tono según el valor.
+ *  Con ``max`` la escala es fija (p. ej. puntuaciones 0-100); con ``onSelect`` las
+ *  celdas con dato se pueden elegir con el ratón o con Intro. */
 export function Heatmap({
   rows,
   cols,
   cell,
   format = compact,
+  max: fixedMax,
+  onSelect,
+  selected,
 }: {
   rows: { key: string; label: string }[]
   cols: { key: string; label: string }[]
   cell: (row: string, col: string) => { value: number; detail?: string } | undefined
   format?: (n: number) => string
+  max?: number
+  onSelect?: (row: string, col: string) => void
+  selected?: { row: string; col: string } | null
 }) {
   const tip = useTooltip()
-  const max = Math.max(1, ...rows.flatMap((r) => cols.map((c) => cell(r.key, c.key)?.value ?? 0)))
+  const max = fixedMax ?? Math.max(1, ...rows.flatMap((r) => cols.map((c) => cell(r.key, c.key)?.value ?? 0)))
   const steps = ['var(--seq-1)', 'var(--seq-2)', 'var(--seq-3)', 'var(--seq-4)', 'var(--seq-5)']
   return (
     <div className="chart heatmap-wrap" ref={tip.ref}>
@@ -275,6 +283,8 @@ export function Heatmap({
               {cols.map((c) => {
                 const data = cell(r.key, c.key)
                 const v = data?.value ?? 0
+                const isSelected = selected?.row === r.key && selected?.col === c.key
+                const selectable = !!onSelect && !!data
                 const step = v > 0 ? Math.min(steps.length - 1, Math.floor((v / max) * steps.length - 1e-9)) : -1
                 const tipData = {
                   title: `${r.label} · ${c.label}`,
@@ -283,15 +293,27 @@ export function Heatmap({
                 return (
                   <td
                     key={c.key}
-                    tabIndex={v > 0 ? 0 : -1}
-                    className={`heat-cell${step >= 3 ? ' heat-dark' : ''}`}
+                    tabIndex={v > 0 || selectable ? 0 : -1}
+                    className={`heat-cell${step >= 3 ? ' heat-dark' : ''}${selectable ? ' heat-selectable' : ''}${isSelected ? ' heat-selected' : ''}`}
+                    aria-selected={onSelect ? isSelected : undefined}
+                    onClick={selectable ? () => onSelect(r.key, c.key) : undefined}
+                    onKeyDown={
+                      selectable
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onSelect(r.key, c.key)
+                            }
+                          }
+                        : undefined
+                    }
                     style={{ background: step >= 0 ? steps[step] : undefined }}
                     onMouseMove={(e) => tip.show(e, e.currentTarget, tipData)}
                     onMouseLeave={tip.hide}
                     onFocus={(e) => tip.show(null, e.currentTarget, tipData)}
                     onBlur={tip.hide}
                   >
-                    {v > 0 ? format(v) : ''}
+                    {v > 0 || selectable ? format(v) : ''}
                   </td>
                 )
               })}

@@ -13,8 +13,9 @@
 | 6a | Frontend de operaciones | App principal: oportunidades, documentos, propuestas, copiloto, búsqueda, clientes, talento y avisos | 16–17 | Hecha |
 | 6b | Frontend de analytics y admin | Paneles de analítica y administración | 16–17 | Hecha |
 | 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
-| 8 | Despliegue y operación | CI/CD con imágenes en GHCR y despliegue aprobado con vuelta atrás, `docker-compose.prod.yml`, HTTPS, Flower, copias de seguridad, avisos por correo, marcado de contenido IA | 21–22, Ap. D | En revisión |
-| 9 | BI y documentación | Analytics (heatmap, embudo, ROI) y documentación | 23–24 | Pendiente |
+| 8 | Despliegue y operación | CI/CD con imágenes en GHCR y despliegue aprobado con vuelta atrás, `docker-compose.prod.yml`, HTTPS, Flower, copias de seguridad, avisos por correo, marcado de contenido IA | 21–22, Ap. D | Hecha |
+| 9a | Inteligencia comercial | Mapa de oportunidad con pesos, comparación con el periodo anterior y fotos de cartera, objetivos, competidores con DAFO, importación desde Excel y «Pregunta a tus datos» | 23 | En revisión |
+| 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | Pendiente |
 
 ## Del núcleo mínimo a los 17 servicios del libro
 
@@ -32,6 +33,9 @@ admin, y Selenium Grid con 3 nodos de Chrome en una red `rpa_net` aislada.
 - Los prompts iniciales son de redacción propia, con la estructura del Apéndice E.
 - Los agentes no tienen herramientas de terminal ni de ficheros: solo un catálogo cerrado
   que llama a los servicios de negocio (ADR-013).
+- Mapa de oportunidad con puntuaciones relativas (100 = mejor cruce del mes), importación
+  de Excel síncrona con límites en lugar de una tarea en segundo plano, y «Pregunta a tus
+  datos» sobre un resumen calculado, sin texto a SQL (ADR-017).
 
 ## Qué queda de los capítulos 7–10 para fases posteriores
 

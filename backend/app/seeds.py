@@ -27,6 +27,7 @@ APPS = [
 # aparece está denegado. Los roles con is_admin=True tienen todo, solo en su app.
 R, RW = ["read"], ["read", "write"]
 AI_ALL = ["document_analyzer", "proposal_generator", "cv_analyzer", "copilot_chat"]
+COMPETITORS_RW = ["read", "write", "delete"]
 ROLES = {
     "operations": {
         "admin": ("Administrador de operaciones", True, {}),
@@ -55,8 +56,9 @@ ROLES = {
     "analytics": {
         "admin": ("Administrador de analítica", True, {}),
         "analyst": ("Analista de negocio", False, {"dashboards": RW, "reports": ["read", "generate"],
-                                                   "copilot": RW, "ai_modules_access": ["copilot_chat"]}),
-        "viewer": ("Consulta", False, {"dashboards": R, "reports": R, "ai_modules_access": []}),
+                                                   "copilot": RW, "competitors": COMPETITORS_RW,
+                                                   "ai_modules_access": ["copilot_chat", "analytics_assistant"]}),
+        "viewer": ("Consulta", False, {"dashboards": R, "reports": R, "competitors": R, "ai_modules_access": []}),
     },
     "admin": {
         "superadmin": ("Superadministrador", True, {}),
@@ -79,7 +81,7 @@ ROLES = {
 # Módulos de permiso que llegaron en fases posteriores: se añaden a los roles de
 # serie que ya existían en la BD (solo si el rol no tiene ese módulo; no se
 # tocan los permisos que un administrador haya cambiado).
-LATER_MODULES = {"search", "copilot", "agents"}
+LATER_MODULES = {"search", "copilot", "agents", "competitors"}
 
 # Patrones de la primera capa del clasificador (Capítulo 13). Redacción propia.
 # Se aplican sobre el texto en minúsculas y sin tildes. Editables desde Admin.
@@ -202,6 +204,9 @@ LLM_SERVICES = [
      "CV adaptado a una oportunidad"),
     ("proposal_deck", "claude-haiku-5-5", "claude-sonnet-5-5", 4000, "low", "proposal.deck",
      "Guion de la presentación PPTX de una propuesta"),
+    # Inteligencia comercial (fase 9a)
+    ("analytics_qa", "claude-sonnet-5-5", "claude-haiku-5-5", 6000, "low", "analytics.qa",
+     "Preguntas en lenguaje natural sobre el cuadro de mando"),
 ]
 
 # USD por millón de tokens (precio estándar publicado por Anthropic en la fecha
@@ -231,6 +236,7 @@ HUMAN_BASELINES = [
     ("proposal_generation", "Redactar el primer borrador de una propuesta", 480),
     ("chat_rag", "Buscar una respuesta en la documentación", 15),
     ("cv_tailoring", "Adaptar un CV a una propuesta", 45),
+    ("analytics_qa", "Sacar una cifra del cuadro de mando y explicarla", 20),
 ]
 
 # Agentes de partida (Capítulo 15). Se editan y prueban en Admin -> Agentes.

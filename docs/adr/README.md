@@ -22,3 +22,4 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [014](ADR-014-frontal-operaciones.md) | Frontal de operaciones con sesión en memoria, React Query y permisos desde `/me` | Aceptado |
 | [015](ADR-015-analitica-y-administracion.md) | Analítica y administración como tres aplicaciones en un solo frontal, con historial de estados | Aceptado |
 | [016](ADR-016-despliegue-y-operacion.md) | Despliegue en un servidor con Docker Compose, imágenes en GHCR y vuelta atrás automática | Aceptado |
+| [017](ADR-017-inteligencia-comercial.md) | Inteligencia comercial: puntuaciones relativas en el backend, fotos diarias de cartera e importación síncrona | Aceptado |

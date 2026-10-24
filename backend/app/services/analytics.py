@@ -1,8 +1,13 @@
 """Cuadro de mando de negocio (app ``analytics``, fase 6b).
 
 Se calcula al vuelo sobre operations_db: con los volúmenes del caso (miles de
-oportunidades) basta con una consulta por tabla y el agregado en Python. Si crece,
-el paso siguiente son las instantáneas diarias de ``analytics_db`` (fase 9).
+oportunidades) basta con una consulta por tabla y el agregado en Python.
+
+Lo que no se puede reconstruir después (cuánta cartera abierta había un día
+concreto) se guarda cada noche en ``analytics_snapshots`` (fase 9a). Con esas
+fotos se compara la cartera con la del inicio del periodo y se dibuja su evolución.
+Las métricas de flujo (nuevas, ganadas, perdidas) del periodo anterior sí salen
+del historial de estados.
 
 Definiciones:
 - Cartera abierta: oportunidades que no están en F5 (ganada, perdida, descartada).
@@ -14,11 +19,13 @@ Definiciones:
 - Fechas de cierre: las del historial de estados, no ``updated_at``.
 """
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from ..extensions import db
 from ..models import (
+    AnalyticsSnapshot,
+    BusinessTarget,
     Client,
     LLMUsageLog,
     Opportunity,
@@ -75,6 +82,8 @@ def overview(months: int = 12, service_line: str | None = None, sector: str | No
     now = utcnow()
     start = period_start(months, now)
     keys = month_keys(start, now)
+    # Periodo anterior de la misma duración, para comparar
+    prev_start = period_start(months, start - timedelta(days=1))
 
     rows = db.session.execute(
         db.select(Opportunity.id, Opportunity.status, Opportunity.service_line, Opportunity.sector,
@@ -123,7 +132,15 @@ def overview(months: int = 12, service_line: str | None = None, sector: str | No
                    Decimal(0))
     won = lost = discarded = 0
     won_eur = Decimal(0)
+    prev = {"new_count": 0, "won_count": 0, "won_eur": Decimal(0), "lost_count": 0}
     for oid, item in opps.items():
+        closed = closed_at.get(oid)
+        if prev_start <= item["created_at"] < start:
+            prev["new_count"] += 1
+        if closed and prev_start <= closed[1] < start and closed[0] in ("won", "lost"):
+            prev[f"{closed[0]}_count"] += 1
+            if closed[0] == "won":
+                prev["won_eur"] += item["value"]
         if item["created_at"] >= start:
             m = monthly.get(_month(item["created_at"]))
             if m:
@@ -215,11 +232,13 @@ def overview(months: int = 12, service_line: str | None = None, sector: str | No
                   Proposal.review_round).where(Proposal.is_active.is_(True))
     ).all()
     by_status: dict[str, int] = defaultdict(int)
-    days_to_send, rounds, sent = [], [], 0
+    days_to_send, rounds, sent, prev_sent = [], [], 0, 0
     for opp_id, status, created_at, sent_at, review_round in proposal_rows:
         if opp_id not in opps:
             continue
         by_status[status] += 1
+        if sent_at and prev_start <= sent_at < start:
+            prev_sent += 1
         if sent_at and sent_at >= start:
             sent += 1
             days_to_send.append((sent_at - created_at).total_seconds() / 86400)
@@ -233,6 +252,9 @@ def overview(months: int = 12, service_line: str | None = None, sector: str | No
             "new_count": len(cohort), "won_count": won, "won_eur": _eur(won_eur), "lost_count": lost,
             "discarded_count": discarded, "win_rate": _rate(won, won + lost), "proposals_sent": sent,
         },
+        "previous": _previous_kpis(prev, prev_sent, prev_start, start, filtered=bool(service_line or sector)),
+        "pipeline_history": [] if (service_line or sector) else pipeline_history(start.date()),
+        "targets": targets_vs_actual(keys, monthly, service_line) if not sector else [],
         "funnel": funnel,
         "monthly": [{**m, "new_eur": _eur(m["new_eur"]), "won_eur": _eur(m["won_eur"])} for m in monthly.values()],
         "by_service_line": by_line,
@@ -263,3 +285,119 @@ def ai_costs(months: int = 12) -> list[dict]:
             m["calls"] += calls
             m["cost_usd"] += Decimal(str(cost or 0))
     return [{**m, "cost_usd": f"{m['cost_usd']:.4f}"} for m in series.values()]
+
+
+# ---------------------------------------------------------------- Comparación y fotos (fase 9a)
+SNAPSHOT_METRICS = ("pipeline_eur", "weighted_pipeline_eur", "open_count")
+
+
+def _previous_kpis(prev: dict, sent: int, prev_start: datetime, start: datetime, *, filtered: bool) -> dict:
+    """KPI del periodo anterior. La cartera abierta sale de la foto más cercana al
+    inicio del periodo actual (solo sin filtros: las fotos guardan el total)."""
+    snap = None if filtered else snapshot_at(start.date() - timedelta(days=1))
+    return {
+        "from": prev_start.isoformat() + "Z", "to": start.isoformat() + "Z",
+        "new_count": prev["new_count"], "won_count": prev["won_count"], "won_eur": _eur(prev["won_eur"]),
+        "lost_count": prev["lost_count"],
+        "win_rate": _rate(prev["won_count"], prev["won_count"] + prev["lost_count"]),
+        "proposals_sent": sent,
+        "pipeline_eur": snap["pipeline_eur"] if snap else None,
+        "weighted_pipeline_eur": snap["weighted_pipeline_eur"] if snap else None,
+        "open_count": int(Decimal(snap["open_count"])) if snap else None,
+        "pipeline_date": snap["date"] if snap else None,
+    }
+
+
+def take_snapshot(today: date | None = None) -> dict:
+    """Foto de la cartera abierta (total y por fase). Idempotente: una por día."""
+    today = today or utcnow().date()
+    values: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for status, value, probability in db.session.execute(
+        db.select(Opportunity.status, Opportunity.estimated_value_eur, Opportunity.probability)
+        .where(Opportunity.is_active.is_(True), Opportunity.status.notin_(CLOSED))
+    ).all():
+        phase = Opportunity.STATUS_PHASE.get(status, "F1")
+        value = value or Decimal(0)
+        weighted = value * probability / 100 if probability is not None else Decimal(0)
+        for dimension in ("total", phase):
+            values[("open_count", dimension)] += 1
+            values[("pipeline_eur", dimension)] += value
+            values[("weighted_pipeline_eur", dimension)] += weighted
+    for metric in SNAPSHOT_METRICS:
+        values.setdefault((metric, "total"), Decimal(0))
+    existing = {(s.metric, s.dimension): s for s in db.session.scalars(
+        db.select(AnalyticsSnapshot).where(AnalyticsSnapshot.snapshot_date == today,
+                                           AnalyticsSnapshot.metric.in_(SNAPSHOT_METRICS)))}
+    for (metric, dimension), value in values.items():
+        row = existing.pop((metric, dimension), None)
+        if row is None:
+            db.session.add(AnalyticsSnapshot(snapshot_date=today, metric=metric, dimension=dimension, value=value))
+        else:
+            row.value = value
+    for row in existing.values():  # una fase que se ha quedado vacía
+        row.value = Decimal(0)
+    db.session.commit()
+    return {"date": today.isoformat(), "pipeline_eur": _eur(values[("pipeline_eur", "total")]),
+            "open_count": int(values[("open_count", "total")])}
+
+
+def _snapshot_rows(stmt) -> dict[date, dict]:
+    days: dict[date, dict] = defaultdict(dict)
+    for day, metric, value in db.session.execute(stmt).all():
+        days[day][metric] = value
+    return days
+
+
+def snapshot_at(day: date) -> dict | None:
+    """Foto del total más reciente en ``day`` o antes (hasta 7 días antes)."""
+    found = db.session.scalar(
+        db.select(AnalyticsSnapshot.snapshot_date).where(
+            AnalyticsSnapshot.dimension == "total", AnalyticsSnapshot.metric == "pipeline_eur",
+            AnalyticsSnapshot.snapshot_date <= day, AnalyticsSnapshot.snapshot_date >= day - timedelta(days=7))
+        .order_by(AnalyticsSnapshot.snapshot_date.desc()).limit(1))
+    if found is None:
+        return None
+    values = _snapshot_rows(db.select(AnalyticsSnapshot.snapshot_date, AnalyticsSnapshot.metric,
+                                      AnalyticsSnapshot.value)
+                            .where(AnalyticsSnapshot.snapshot_date == found, AnalyticsSnapshot.dimension == "total"))
+    v = values[found]
+    return {"date": found.isoformat(), **{m: _eur(v.get(m, Decimal(0))) for m in SNAPSHOT_METRICS}}
+
+
+def pipeline_history(since: date) -> list[dict]:
+    """Evolución de la cartera abierta: una foto por semana (la última de cada semana)."""
+    days = _snapshot_rows(
+        db.select(AnalyticsSnapshot.snapshot_date, AnalyticsSnapshot.metric, AnalyticsSnapshot.value)
+        .where(AnalyticsSnapshot.dimension == "total", AnalyticsSnapshot.snapshot_date >= since,
+               AnalyticsSnapshot.metric.in_(SNAPSHOT_METRICS))
+        .order_by(AnalyticsSnapshot.snapshot_date))
+    weekly: dict[tuple[int, int], date] = {}
+    for day in sorted(days):
+        weekly[day.isocalendar()[:2]] = day
+    return [{"date": d.isoformat(), "pipeline_eur": _eur(days[d].get("pipeline_eur", Decimal(0))),
+             "weighted_pipeline_eur": _eur(days[d].get("weighted_pipeline_eur", Decimal(0))),
+             "open_count": int(days[d].get("open_count", 0))} for d in sorted(weekly.values())]
+
+
+def targets_vs_actual(keys: list[str], monthly: dict, service_line: str | None) -> list[dict]:
+    """Objetivo frente a real por métrica. Solo cuentan los meses que tienen objetivo."""
+    rows = db.session.execute(
+        db.select(BusinessTarget.metric, BusinessTarget.period, BusinessTarget.target_value)
+        .where(BusinessTarget.is_active.is_(True), BusinessTarget.period.in_(keys),
+               BusinessTarget.service_line == (service_line or ""))
+    ).all()
+    by_metric: dict[str, dict] = {}
+    for metric, period, target in rows:
+        m = by_metric.setdefault(metric, {"metric": metric, "target": Decimal(0), "actual": Decimal(0),
+                                          "months": []})
+        m["target"] += target
+        m["actual"] += Decimal(monthly[period][metric])
+        m["months"].append(period)
+    out = []
+    for metric in BusinessTarget.METRICS:
+        if metric in by_metric:
+            m = by_metric[metric]
+            out.append({**m, "target": _eur(m["target"]), "actual": _eur(m["actual"]),
+                        "progress": round(float(m["actual"] / m["target"]), 3) if m["target"] else None,
+                        "months": sorted(m["months"])})
+    return out

@@ -52,6 +52,7 @@ export const MODULE_NAMES: Record<string, string> = {
   copilot: 'Copiloto',
   reports: 'Informes',
   dashboards: 'Cuadros de mando',
+  competitors: 'Competidores',
   users: 'Usuarios',
   roles: 'Roles',
   llm_config: 'Modelos y costes de IA',
@@ -81,6 +82,7 @@ export const AI_MODULE_NAMES: Record<string, string> = {
   proposal_generator: 'Redacción de propuestas',
   cv_analyzer: 'Análisis de CV',
   copilot_chat: 'Copiloto',
+  analytics_assistant: 'Preguntas sobre los datos (Analítica)',
 }
 
 export const SEVERITY_TONE: Record<string, 'neutral' | 'warning' | 'danger'> = {

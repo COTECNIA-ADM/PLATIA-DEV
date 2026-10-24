@@ -3,11 +3,12 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 8, despliegue y operación** (11 contenedores en desarrollo; en
+Estado actual: **fase 9a, inteligencia comercial** (11 contenedores en desarrollo; en
 producción se añaden Flower y, si usas Let's Encrypt, certbot). En
 http://localhost:8080 está la aplicación de operaciones (oportunidades, documentos,
 propuestas, copiloto, búsqueda, clientes, talento y avisos); en `/analytics/`, el cuadro de
-mando de negocio y el valor de la IA; y en `/admin/`, usuarios y roles, modelos y costes de
+mando de negocio (con comparación y objetivos), el mapa de oportunidad, los competidores,
+la importación desde Excel, las preguntas a la IA sobre los datos y el valor de la IA; y en `/admin/`, usuarios y roles, modelos y costes de
 IA, prompts, agentes, búsqueda, tareas y auditoría. Cada persona ve solo las aplicaciones y
 funciones que su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el
 copiloto (5c). Para producción (HTTPS, despliegue desde GitHub con vuelta atrás, copias de

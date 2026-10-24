@@ -19,3 +19,4 @@ python-docx~=1.1
 defusedxml~=0.7
 reportlab~=4.4
 python-pptx~=1.0
+openpyxl~=3.1           # importación de Excel en Analítica (fase 9a)
