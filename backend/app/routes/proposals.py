@@ -94,24 +94,9 @@ def list_proposals():
 def create_proposal():
     data = parse_body(ProposalIn)
     opp = get_active(Opportunity, data.opportunity_id, "Oportunidad")
-    if opp.status in ("won", "lost", "discarded"):
-        raise BusinessRuleError("La oportunidad está cerrada.")
-    template = None
-    if data.template_id is not None:
-        template = get_active(ProposalTemplate, data.template_id, "Plantilla")
-        if template.proposal_type != data.proposal_type:
-            raise ValidationError("La plantilla es de otro tipo de propuesta.")
-    previous = db.session.scalar(db.select(db.func.max(Proposal.version_number))
-                                 .where(Proposal.opportunity_id == opp.id))
-    proposal = Proposal(
-        opportunity_id=opp.id, template_id=data.template_id, proposal_type=data.proposal_type,
-        title=data.title or f"Propuesta: {opp.title}"[:500], total_amount_eur=data.total_amount_eur,
-        version_number=(previous or 0) + 1, owner_user_id=g.security.user_id,
-        created_by=g.security.user_id,
-    )
-    service.build_sections(proposal, template)
-    db.session.add(proposal)
-    db.session.commit()
+    template = get_active(ProposalTemplate, data.template_id, "Plantilla") if data.template_id is not None else None
+    proposal = service.create(opp, proposal_type=data.proposal_type, template=template, title=data.title,
+                              total_amount_eur=data.total_amount_eur, user_id=g.security.user_id)
     record_audit(AuditAction.RECORD_CREATED, proposal, opportunity_id=opp.id)
     return jsonify(detail(proposal)), 201
 
@@ -342,21 +327,7 @@ def generate(proposal_id: int):
     Va en segundo plano: el avance se ve en ``generation_status`` y en cada sección."""
     proposal = _get(proposal_id)
     ensure_can_modify("proposals", proposal)
-    service.ensure_editable(proposal)
     data = parse_body(GenerateProposalIn)
-    if proposal.generation_status in ("queued", "running"):
-        raise ConflictError("La propuesta ya se está redactando.")
-    from ..ai.proposal_writer import sections_to_write
-    from ..tasks.ai import generate_proposal
-
-    targets = sections_to_write(proposal, data.sections)
-    if not targets:
-        raise BusinessRuleError("No hay secciones que redactar (las editadas a mano solo se "
-                                "reescriben si las indicas en 'sections').")
-    proposal.set_system_fields(generation_status="queued", generation_error=None)
-    db.session.commit()
-    enqueue(generate_proposal, proposal.id, g.security.user_id, data.sections, data.instructions,
-            priority=PRIORITY_USER)
-    db.session.refresh(proposal)
+    targets = service.start_generation(proposal, g.security.user_id, data.sections, data.instructions)
     return jsonify({"id": proposal.id, "generation_status": proposal.generation_status,
                     "sections": [s.key for s in targets]}), 202

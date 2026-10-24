@@ -17,6 +17,7 @@ MODULES: dict[str, set[str]] = {
     "talent": {"read", "write", "delete"},
     "alerts": {"read", "write"},
     "notifications": {"read"},
+    "copilot": {"read", "write"},  # conversaciones y memoria propias (fase 5c)
     "reports": {"read", "generate"},
     # --- analytics
     "dashboards": {"read", "write"},
@@ -29,6 +30,7 @@ MODULES: dict[str, set[str]] = {
     "health": {"read"},
     "tasks": {"read", "write"},
     "search": {"read", "write"},  # patrones del clasificador e índices (fase 5b)
+    "agents": {"read", "write"},  # Agent Studio (fase 5c)
     # --- security
     "guardrails": {"read"},
 }

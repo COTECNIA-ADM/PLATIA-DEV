@@ -16,4 +16,7 @@ RUN useradd --create-home --uid 1000 app && chown -R app:app /app \
 USER app
 
 EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "wsgi:app"]
+# Hilos (gthread): una respuesta del copiloto en streaming ocupa un hilo, no un proceso entero.
+# 2 procesos x 8 hilos = 16 peticiones a la vez. El timeout cubre el streaming más largo.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--worker-class", "gthread", "--threads", "8", \
+     "--timeout", "300", "wsgi:app"]

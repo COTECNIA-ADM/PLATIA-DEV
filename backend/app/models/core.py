@@ -24,7 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
-from .base import AuditMixin, BusinessMixin, TimestampMixin, utcnow
+from .base import AuditMixin, BusinessMixin, TimestampMixin, VersionedMixin, utcnow
 
 BIND = "core"
 
@@ -158,6 +158,9 @@ class AuditAction:
     GDPR_AI_ERASURE = "GDPR_AI_ERASURE"
     # Búsqueda (fase 5b)
     SEARCH_CONFIG_CHANGED = "SEARCH_CONFIG_CHANGED"
+    # Agentes y copiloto (fase 5c)
+    AI_AGENT_APPROVAL = "AI_AGENT_APPROVAL"
+    AGENT_CONFIG_CHANGED = "AGENT_CONFIG_CHANGED"
 
 
 class AuditLog(db.Model):
@@ -451,3 +454,132 @@ class SearchQueryLog(db.Model):
     user_rating: Mapped[int | None] = mapped_column(Integer)
     expected_intent: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+# ---------------------------------------------------------------- Agentes y copiloto (Caps. 14 y 15)
+class AgentDefinition(VersionedMixin, AuditMixin, db.Model):
+    """Un agente definido como datos: qué modelo usa, con qué prompt, qué
+    herramientas tiene y con qué límites. Se crea y prueba en el Agent Studio de
+    Admin sin redesplegar; el código solo implementa las herramientas."""
+
+    __bind_key__ = BIND
+    __tablename__ = "agent_definitions"
+
+    STATUSES = ("draft", "active", "archived")
+    TYPES = ("conversational", "specialist")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(10), default="draft", nullable=False)
+    agent_type: Mapped[str] = mapped_column(String(20), default="conversational", nullable=False)
+    llm_service_type: Mapped[str] = mapped_column(String(50), default="agent_copilot", nullable=False)
+    prompt_name: Mapped[str] = mapped_column(String(100), nullable=False)  # agent.<slug>
+    max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    max_tool_calls: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=180, nullable=False)
+    intent_keywords: Mapped[list | None] = mapped_column(JSON)  # para elegir el agente de un encargo
+    success_criteria: Mapped[str | None] = mapped_column(Text)
+    test_cases: Mapped[list | None] = mapped_column(JSON)  # [{"input": ..., "expect_tools": [...]}]
+    version_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    tools: Mapped[list["AgentToolAssignment"]] = relationship(
+        back_populates="agent", order_by="AgentToolAssignment.sort_order", cascade="all, delete-orphan")
+
+
+class AgentToolAssignment(TimestampMixin, db.Model):
+    """Herramienta asignada a un agente con su nivel de autonomía:
+    ``auto`` (se ejecuta), ``notify`` (se ejecuta y se avisa) o ``approve``
+    (la persona la confirma antes)."""
+
+    __bind_key__ = BIND
+    __tablename__ = "agent_tool_assignments"
+    __table_args__ = (UniqueConstraint("agent_id", "tool_name", name="uq_agent_tool"),)
+
+    LEVELS = ("auto", "notify", "approve")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agent_definitions.id"), nullable=False, index=True)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    approval_level: Mapped[str] = mapped_column(String(10), default="auto", nullable=False)
+    config: Mapped[dict | None] = mapped_column(JSON)
+
+    agent: Mapped[AgentDefinition] = relationship(back_populates="tools")
+
+
+class AgentDefinitionVersion(AuditMixin, db.Model):
+    """Copia de la definición completa (con herramientas) cada vez que cambia: se
+    puede comparar y restaurar."""
+
+    __bind_key__ = BIND
+    __tablename__ = "agent_definition_versions"
+    __table_args__ = (UniqueConstraint("agent_id", "version_number", name="uq_agent_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agent_definitions.id"), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500))
+
+
+class AgentRun(db.Model):
+    """Una ejecución de un agente: iteraciones, herramientas, tokens, coste y cómo
+    terminó. Si espera una aprobación, guarda aquí el estado para reanudarla."""
+
+    __bind_key__ = BIND
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_agent_created", "agent_id", "created_at"),
+        Index("ix_agent_runs_user_created", "user_id", "created_at"),
+        Index("ix_agent_runs_status_expires", "status", "expires_at"),
+    )
+
+    STATUSES = ("running", "awaiting_approval", "completed", "failed", "max_iterations", "expired", "cancelled")
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    run_uid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    agent_id: Mapped[int] = mapped_column(ForeignKey("agent_definitions.id"), nullable=False)
+    agent_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    conversation_id: Mapped[int | None] = mapped_column(Integer)  # operations_db.chat_conversations
+    mode: Mapped[str] = mapped_column(String(10), default="chat", nullable=False)  # chat | sandbox
+    status: Mapped[str] = mapped_column(String(20), default="running", nullable=False)
+    stop_reason: Mapped[str | None] = mapped_column(String(30))
+    iterations: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tool_calls: Mapped[list | None] = mapped_column(JSON)  # [{name, level, ok, ms, approved}]
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[dict | None] = mapped_column(JSON)  # mensajes, solo mientras espera aprobación
+    pending: Mapped[list | None] = mapped_column(JSON)  # llamadas que esperan aprobación
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error: Mapped[str | None] = mapped_column(String(500))
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class UserMemory(TimestampMixin, db.Model):
+    """Lo que el copiloto recuerda de una persona entre conversaciones (Capítulo 14).
+
+    Pocas y útiles: preferencias, datos de clientes, forma de trabajar y
+    conclusiones. La persona las ve, las corrige y las borra."""
+
+    __bind_key__ = BIND
+    __tablename__ = "user_memories"
+    __table_args__ = (UniqueConstraint("user_id", "content_hash", name="uq_user_memory_hash"),)
+
+    CATEGORIES = ("preference", "client_fact", "workflow", "insight")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    access_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    source: Mapped[str] = mapped_column(String(10), default="auto", nullable=False)  # auto | user
+    source_conversation_id: Mapped[int | None] = mapped_column(Integer)

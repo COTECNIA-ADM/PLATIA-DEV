@@ -8,6 +8,7 @@ datos de uso que este servicio le devuelve (ADR-011).
 import asyncio
 import functools
 import hmac
+import json
 import math
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 import httpx
 import structlog
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from qdrant_client import AsyncQdrantClient
 from starlette.concurrency import run_in_threadpool
 
@@ -139,18 +140,69 @@ async def health(settings: Settings = Depends(get_settings), runtime: Runtime = 
 # ------------------------------------------------------------------ LLM
 @app.post("/v1/complete", dependencies=[Depends(require_api_key)])
 async def complete(body: CompleteRequest, runtime: Runtime = Depends(get_runtime)):
-    outcome = await llm.complete(
-        providers=runtime.providers, breaker=runtime.breaker,
-        targets=[t.model_dump() for t in body.targets], system=body.system,
-        messages=[m.model_dump() for m in body.messages], max_tokens=body.max_tokens, effort=body.effort,
-        json_schema=body.json_schema, timeout=body.timeout_seconds, service_type=body.service_type,
-    )
+    outcome = await llm.complete(**_llm_kwargs(body, runtime))
     payload = outcome.to_dict()
     if outcome.result is None:
         # Se devuelven igualmente los intentos: el backend registra también los fallidos
         status = 422 if outcome.rejected else (502 if outcome.error and "JSON" in outcome.error else 503)
         return JSONResponse(status_code=status, content={"detail": outcome.error, **payload})
     return payload
+
+
+def _llm_kwargs(body: CompleteRequest, runtime: Runtime) -> dict:
+    return dict(
+        providers=runtime.providers, breaker=runtime.breaker,
+        targets=[t.model_dump() for t in body.targets], system=body.system,
+        messages=[m.model_dump() for m in body.messages], max_tokens=body.max_tokens, effort=body.effort,
+        json_schema=body.json_schema, timeout=body.timeout_seconds, service_type=body.service_type,
+        tools=[t.model_dump() for t in body.tools] if body.tools else None,
+    )
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/v1/stream", dependencies=[Depends(require_api_key)])
+async def stream(body: CompleteRequest, runtime: Runtime = Depends(get_runtime)):
+    """Igual que /v1/complete, pero en Server-Sent Events (Capítulo 15).
+
+    Eventos: ``delta`` (texto según llega), y al final ``final`` (mismo cuerpo que
+    /v1/complete, con los bloques de contenido) o ``error`` (con los intentos, para
+    que el backend registre también los fallidos)."""
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def on_text(text: str) -> None:
+        await queue.put(_sse("delta", {"text": text}))
+
+    async def produce() -> None:
+        try:
+            outcome = await llm.complete(**_llm_kwargs(body, runtime), on_text=on_text)
+            payload = outcome.to_dict()
+            if outcome.result is None:
+                await queue.put(_sse("error", {"detail": outcome.error, "rejected": outcome.rejected, **payload}))
+            else:
+                await queue.put(_sse("final", payload))
+        except Exception as exc:  # noqa: BLE001 - el cliente siempre recibe un cierre
+            log.exception("llm_stream_failed", service_type=body.service_type)
+            await queue.put(_sse("error", {"detail": f"Error interno: {type(exc).__name__}", "attempts": []}))
+        finally:
+            await queue.put(None)
+
+    async def events():
+        task = asyncio.create_task(produce())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            if not task.done():
+                task.cancel()  # el backend cortó la conexión: no se sigue generando
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ------------------------------------------------------------------ Embeddings y RAG

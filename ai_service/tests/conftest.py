@@ -22,14 +22,26 @@ def make_settings(**overrides) -> Settings:
 
 
 class FakeStream:
-    def __init__(self, message):
+    def __init__(self, message, fail_after_text: Exception | None = None):
         self._message = message
+        self._fail = fail_after_text
 
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, *exc):
         return False
+
+    def __aiter__(self):
+        return self._events()
+
+    async def _events(self):
+        for block in self._message.content:
+            if block.type == "text":
+                for word in block.text.split(" "):
+                    yield SimpleNamespace(type="text", text=word + " ")
+                if self._fail is not None:
+                    raise self._fail
 
     async def get_final_message(self):
         return self._message
@@ -48,6 +60,8 @@ class FakeAnthropic:
         item = self.responses.pop(0) if self.responses else "ok"
         if isinstance(item, Exception):
             raise item
+        if isinstance(item, tuple):  # (texto, excepción a mitad del streaming)
+            return FakeStream(fake_message(item[0], kwargs.get("model")), item[1])
         return FakeStream(fake_message(item, kwargs.get("model")))
 
 

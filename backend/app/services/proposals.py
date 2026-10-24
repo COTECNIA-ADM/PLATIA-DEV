@@ -11,7 +11,8 @@ estado a mano. Quien revisa no puede ser el responsable de la propuesta
 """
 import structlog
 
-from ..errors import BusinessRuleError, ForbiddenError
+from ..errors import BusinessRuleError, ConflictError, ForbiddenError, ValidationError
+from ..extensions import db
 from ..models import Opportunity, Proposal, ProposalReview, ProposalSection, ProposalTemplate, utcnow
 from . import opportunities as opp_service
 
@@ -79,6 +80,47 @@ def build_sections(proposal: Proposal, template: ProposalTemplate | None) -> Non
     for position, (key, title) in enumerate(pairs):
         proposal.sections.append(ProposalSection(key=key, title=title, position=position,
                                                  created_by=proposal.created_by))
+
+
+def create(opp: Opportunity, *, proposal_type: str, template: ProposalTemplate | None, title: str | None,
+           total_amount_eur, user_id: int) -> Proposal:
+    """Crea una propuesta en borrador con sus secciones (desde la API o el copiloto). Hace commit."""
+    if opp.status in ("won", "lost", "discarded"):
+        raise BusinessRuleError("La oportunidad está cerrada.")
+    if template is not None and template.proposal_type != proposal_type:
+        raise ValidationError("La plantilla es de otro tipo de propuesta.")
+    previous = db.session.scalar(db.select(db.func.max(Proposal.version_number))
+                                 .where(Proposal.opportunity_id == opp.id))
+    proposal = Proposal(
+        opportunity_id=opp.id, template_id=template.id if template else None, proposal_type=proposal_type,
+        title=title or f"Propuesta: {opp.title}"[:500], total_amount_eur=total_amount_eur,
+        version_number=(previous or 0) + 1, owner_user_id=user_id, created_by=user_id,
+    )
+    build_sections(proposal, template)
+    db.session.add(proposal)
+    db.session.commit()
+    return proposal
+
+
+def start_generation(proposal: Proposal, user_id: int, sections: list[str] | None,
+                     instructions: str | None) -> list[ProposalSection]:
+    """Encola la redacción con IA de las secciones (por defecto, las no editadas a mano)."""
+    from ..ai.proposal_writer import sections_to_write
+    from ..queue import PRIORITY_USER, enqueue
+    from ..tasks.ai import generate_proposal
+
+    ensure_editable(proposal)
+    if proposal.generation_status in ("queued", "running"):
+        raise ConflictError("La propuesta ya se está redactando.")
+    targets = sections_to_write(proposal, sections)
+    if not targets:
+        raise BusinessRuleError("No hay secciones que redactar (las editadas a mano solo se "
+                                "reescriben si las indicas en 'sections').")
+    proposal.set_system_fields(generation_status="queued", generation_error=None)
+    db.session.commit()
+    enqueue(generate_proposal, proposal.id, user_id, sections, instructions, priority=PRIORITY_USER)
+    db.session.refresh(proposal)
+    return targets
 
 
 def ensure_editable(proposal: Proposal) -> None:

@@ -140,6 +140,15 @@ def _ai_settings(cfg, env=None) -> None:
     # Caracteres máximos que se envían al modelo por documento
     cfg.ANALYSIS_MAX_CHARS = int(env.get("ANALYSIS_MAX_CHARS", "150000"))
     cfg.ENRICH_MAX_CHARS = int(env.get("ENRICH_MAX_CHARS", "40000"))
+    # Copiloto y agentes (Capítulos 14 y 15)
+    cfg.COPILOT_HISTORY_TURNS = int(env.get("COPILOT_HISTORY_TURNS", "10"))  # turnos completos en el contexto
+    cfg.COPILOT_SUMMARY_BATCH = int(env.get("COPILOT_SUMMARY_BATCH", "10"))  # mensajes de margen antes de resumir
+    cfg.COPILOT_MAX_MESSAGE_CHARS = int(env.get("COPILOT_MAX_MESSAGE_CHARS", "4000"))
+    cfg.AGENT_APPROVAL_TTL_MINUTES = int(env.get("AGENT_APPROVAL_TTL_MINUTES", "15"))
+    cfg.MEMORY_MAX_PER_USER = int(env.get("MEMORY_MAX_PER_USER", "50"))
+    cfg.MEMORY_INJECT = int(env.get("MEMORY_INJECT", "10"))
+    cfg.MEMORY_EXTRACT_ENABLED = _flag("MEMORY_EXTRACT_ENABLED", "true")
+    cfg.MEMORY_EXTRACT_EVERY = int(env.get("MEMORY_EXTRACT_EVERY", "2"))  # cada N intercambios
 
 
 def _search_settings(cfg, env=None) -> None:

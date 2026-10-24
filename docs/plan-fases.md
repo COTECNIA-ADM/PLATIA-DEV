@@ -8,8 +8,8 @@
 | 3 | Seguridad e IAM | JWT con refresh, MFA, roles por aplicación, cabeceras OWASP, rate limiting | 6 | Hecha |
 | 4 | Backend | Blueprints de negocio, colas Celery, tareas programadas, servicios de negocio | 7–10, Ap. B | Hecha |
 | 5a | Núcleo de IA | Factoría con reserva, prompts en BD, costes y presupuestos, guardarraíles, RAG con control de acceso, análisis GO/NO-GO, redacción de propuestas, ROI | 9–12, Ap. C y E | Hecha |
-| 5b | Búsqueda e intención | Meilisearch (búsqueda de texto) y clasificador de intención con Haiku | 13 | En revisión |
-| 5c | Copiloto | Agente con herramientas, chat con streaming (SSE), CV a medida, PDF y PPTX del paquete de propuesta | 14–15 | Pendiente |
+| 5b | Búsqueda e intención | Meilisearch (búsqueda de texto) y clasificador de intención con Haiku | 13 | Hecha |
+| 5c | Copiloto | Agente con herramientas, chat con streaming (SSE), CV a medida, PDF y PPTX del paquete de propuesta | 14–15 | En revisión |
 | 6 | Frontend | App principal completa; después analytics y admin | 16–17 | Pendiente |
 | 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
 | 8 | Despliegue y operación | CI/CD, `docker-compose.prod.yml`, TLS, observabilidad | 21–22, Ap. D | Pendiente |
@@ -29,13 +29,15 @@ admin, y Selenium Grid con 3 nodos de Chrome en una red `rpa_net` aislada.
 - Embeddings con un modelo multilingüe local en lugar de los de OpenAI (ADR-011): sin
   otra clave de pago y sin enviar los documentos a un tercero para indexarlos.
 - Los prompts iniciales son de redacción propia, con la estructura del Apéndice E.
+- Los agentes no tienen herramientas de terminal ni de ficheros: solo un catálogo cerrado
+  que llama a los servicios de negocio (ADR-013).
 
 ## Qué queda de los capítulos 7–10 para fases posteriores
 
 - Análisis de documentos con IA, generación de secciones y similitud semántica en la
   puntuación de oportunidades: hechos en la fase 5a.
 - Clasificación de intención con Haiku: hecha en la fase 5b. CV a medida y PDF/PPTX del paquete de
-  propuesta: fase 5c (hasta entonces se genera el DOCX).
+  propuesta: hechos en la fase 5c.
 - Correo de notificaciones de prioridad alta: fase 8 (SMTP).
 - Integración con CRM (OAuth2) y bots RPA con Selenium (capítulo 10): cuando haya un CRM y
   un portal reales contra los que probar; las colas `crm` y `automation` ya existen.

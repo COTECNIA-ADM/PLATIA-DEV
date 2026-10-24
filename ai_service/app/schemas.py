@@ -1,7 +1,7 @@
 """Esquemas de entrada del servicio de IA. Todo lo que no se declara se rechaza."""
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MODEL_PATTERN = r"^[A-Za-z0-9._:/\-]{1,100}$"
 
@@ -15,9 +15,35 @@ class Target(Strict):
     model: str = Field(pattern=MODEL_PATTERN)
 
 
+BLOCK_TYPES = {"text", "tool_use", "tool_result", "thinking", "redacted_thinking"}
+
+
 class Message(Strict):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=600_000)
+    # Texto o bloques de contenido (bucle de herramientas: tool_use, tool_result y
+    # los bloques de razonamiento, que se devuelven tal cual en el turno siguiente)
+    content: str | list[dict] = Field(min_length=1)
+
+    @field_validator("content")
+    @classmethod
+    def _check_content(cls, value):
+        if isinstance(value, str):
+            if len(value) > 600_000:
+                raise ValueError("Mensaje demasiado largo")
+            return value
+        if len(value) > 100:
+            raise ValueError("Demasiados bloques en un mensaje")
+        for block in value:
+            if not isinstance(block, dict) or block.get("type") not in BLOCK_TYPES:
+                raise ValueError("Tipo de bloque no admitido")
+        return value
+
+
+class Tool(Strict):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    description: str = Field(min_length=10, max_length=4_000)
+    input_schema: dict
+    strict: bool = True
 
 
 class CompleteRequest(Strict):
@@ -28,6 +54,7 @@ class CompleteRequest(Strict):
     max_tokens: int = Field(ge=1, le=64_000)
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     json_schema: dict | None = None
+    tools: list[Tool] | None = Field(default=None, max_length=20)
     timeout_seconds: float = Field(default=180, ge=5, le=900)
     correlation_id: str | None = Field(default=None, max_length=64)
 

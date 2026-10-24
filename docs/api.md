@@ -42,6 +42,8 @@ no responde y el plan B en MySQL está desactivado. Los errores de IA añaden lo
 | Búsqueda | `GET /search?q=&limit=` (oportunidades, documentos y clientes a la vez), `POST /search/opportunities`, `POST /search/documents`, `POST /search/click` (`query_log_id`, `kind`, `object_id`, `position`) | `opportunities.read` / `documents.read` |
 | Asistente | `POST /assistant/query` (`query` máx. 500, `history`, `document_ids`, `opportunity_id`), `POST /assistant/feedback` (`query_log_id`, `rating` 1-5, `expected_intent`) | `opportunities.read` + `copilot_chat` |
 | Búsqueda (admin) | `GET/POST /admin/search/intent-patterns`, `PATCH/DELETE /admin/search/intent-patterns/{id}`, `POST /admin/search/intent/test`, `GET /admin/search/quality?days=`, `GET /admin/search/indexes`, `POST /admin/search/reindex` (`index`) | `search` |
+| Copiloto | `GET/POST /copilot/conversations`, `GET/PATCH/DELETE /copilot/conversations/{id}`, `POST /copilot/conversations/{id}/messages` (SSE; `content` máx. 4.000, `opportunity_id`, `document_ids`), `POST /copilot/runs/{run_id}/approval` (SSE; `approve`, `comment`), `GET /copilot/runs/{run_id}`, `GET/POST/DELETE /copilot/memories`, `PATCH/DELETE /copilot/memories/{id}`, `GET /copilot/export` | `copilot` + `copilot_chat` |
+| Agentes (admin) | `GET /admin/agents/tools`, `GET/POST /admin/agents`, `GET/PATCH /admin/agents/{id}`, `PUT /admin/agents/{id}/tools`, `GET /admin/agents/{id}/versions`, `POST /admin/agents/{id}/versions/{n}/restore`, `POST /admin/agents/{id}/test` (`input`, `expect_tools`), `GET /admin/agents/{id}/metrics?days=`, `GET /admin/agents/runs` | `agents` |
 | Colas (admin) | `GET /admin/tasks/queues`, `GET /admin/tasks/failed`, `POST /admin/tasks/failed/{id}/review`, `POST /admin/tasks/failed/{id}/retry` | `tasks` |
 
 ## Flujos
@@ -104,6 +106,26 @@ para el resto no existe (404), tampoco en las búsquedas ni en las respuestas de
   `confirm` es `null` si falta el destino o el rol no lo permite.
 - `off_topic`: `message` orientativo.
 
+**Copiloto** (decisiones en [ADR-013](adr/ADR-013-copiloto-y-agentes.md)):
+- Las conversaciones son de quien las crea; nadie más las ve. `@oportunidad:{id}`,
+  `@documento:{id}`, `@cliente:{id}` y `@propuesta:{id}` en el texto se convierten en
+  referencias (solo las que la persona puede ver).
+- `POST .../messages` y `POST /copilot/runs/{id}/approval` responden con
+  `text/event-stream`. Eventos: `intent`, `agent` (`slug`, `name`), `delta` (`text`),
+  `replace` (`text`: sustituye lo mostrado), `tool_call` (`name`, `title`, `summary`),
+  `tool_result` (`name`, `ok`, `ms`), `notice` (`message`), `rag_answer` (`sources`,
+  `citations`), `approval_required` (`run_id`, `expires_at`, `actions`), `done` (`status`,
+  `stop_reason`, `iterations`, `tool_calls`, `cost_usd`, `message_id`) y `error` (`message`,
+  `retract`: si es true, hay que borrar lo mostrado).
+- Una entrada bloqueada por los guardarraíles devuelve 422 antes de abrir el stream.
+- `approval_required`: el agente se ha parado. La persona responde con
+  `POST /copilot/runs/{run_id}/approval` antes de 15 minutos; la respuesta sigue por SSE.
+  Una segunda respuesta a la misma ejecución da 409.
+- Herramientas que piden aprobación siempre: analizar oportunidad o documento, crear o
+  redactar propuesta, CV a medida y exportar el paquete. Las de consulta no la piden.
+- El paquete de una propuesta aprobada trae DOCX, PDF y PPTX; el CV a medida, DOCX y PDF
+  (adjuntos `kind=cv`).
+
 ## Quién puede qué (operations)
 
 | Acción | viewer | analyst | manager | admin |
@@ -121,6 +143,7 @@ Con la plataforma levantada y tu usuario administrador:
 ```bash
 python scripts/demo_fase4.py --email tu@empresa.com
 python scripts/demo_fase5.py --email tu@empresa.com   # llamadas reales a Claude (céntimos)
+python scripts/demo_fase5c.py --email tu@empresa.com  # chat con el copiloto y una aprobación
 ```
 
 Piden la contraseña sin mostrarla. La de la fase 4 recorre cliente, oportunidad,

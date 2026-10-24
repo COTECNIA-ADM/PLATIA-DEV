@@ -465,3 +465,87 @@ class IntentTestIn(Schema):
 
 class ReindexIn(Schema):
     index: Literal["opportunities", "documents", "clients"] | None = None
+
+
+# ------------------------------------------------------------------ Copiloto y agentes (fase 5c)
+AgentSlug = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z][a-z0-9_]{1,49}$")]
+ToolName = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z][a-z0-9_]{1,63}$")]
+
+
+class ConversationIn(Schema):
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)] | None = None
+
+
+class ConversationPatch(Schema):
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class ChatMessageIn(Schema):
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    opportunity_id: int | None = Field(default=None, ge=1)  # la oportunidad que se está viendo
+    document_ids: list[int] | None = Field(default=None, max_length=20)
+
+
+class ApprovalIn(Schema):
+    approve: bool
+    comment: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
+
+
+class MemoryIn(Schema):
+    category: Literal["preference", "client_fact", "workflow", "insight"]
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=500)]
+
+
+class MemoryPatch(Schema):
+    category: Literal["preference", "client_fact", "workflow", "insight"] | None = None
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=500)] | None = None
+
+
+class AgentToolIn(Schema):
+    tool_name: ToolName
+    approval_level: Literal["auto", "notify", "approve"] | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=100)
+    config: dict | None = None
+
+
+class AgentTestCase(Schema):
+    input: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    expect_tools: list[ToolName] = Field(default_factory=list, max_length=12)
+
+
+class _AgentFields(Schema):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] | None = None
+    description: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
+    agent_type: Literal["conversational", "specialist"] | None = None
+    llm_service_type: Slug | None = None
+    max_iterations: int | None = Field(default=None, ge=1, le=25)
+    max_tool_calls: int | None = Field(default=None, ge=1, le=50)
+    timeout_seconds: int | None = Field(default=None, ge=10, le=600)
+    intent_keywords: list[Annotated[str, StringConstraints(max_length=50)]] | None = Field(default=None, max_length=30)
+    success_criteria: Annotated[str, StringConstraints(max_length=2000)] | None = None
+    test_cases: list[AgentTestCase] | None = Field(default=None, max_length=20)
+
+
+class AgentIn(_AgentFields):
+    slug: AgentSlug
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    tools: list[AgentToolIn] = Field(default_factory=list, max_length=12)
+    # Si se envía, se publica como primera versión del prompt agent.<slug>
+    system_prompt: PromptText | None = None
+    context_template: Annotated[str, StringConstraints(max_length=5000)] | None = None
+
+
+class AgentPatch(_AgentFields):
+    version: int = Field(ge=1)
+    status: Literal["draft", "active", "archived"] | None = None
+    notes: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+class AgentToolsIn(Schema):
+    version: int = Field(ge=1)
+    tools: list[AgentToolIn] = Field(max_length=12)
+
+
+class AgentTestIn(Schema):
+    input: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    expect_tools: list[ToolName] = Field(default_factory=list, max_length=12)

@@ -3,12 +3,12 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 5b, búsqueda e intención** (11 contenedores): sobre el núcleo de IA
-de la fase 5a (RAG con citas, análisis GO/NO-GO, redacción de propuestas, gobierno de la
-IA), un buscador rápido con Meilisearch (filtros, facetas, búsqueda mientras se escribe)
-y un asistente que entiende frases como "licitaciones de ciberseguridad de más de
-100.000 euros que cierran este mes" y decide si buscar, responder con los documentos o
-proponer un análisis o una propuesta. El plan
+Estado actual: **fase 5c, copiloto** (11 contenedores): sobre el núcleo de IA (fase
+5a) y el buscador con asistente (fase 5b), un copiloto que responde mientras escribe,
+consulta la plataforma con herramientas y prepara trabajo (análisis, propuestas, CV a
+medida, paquete en PDF y PowerPoint) **pidiendo permiso antes de cambiar nada**. Recuerda
+tus preferencias, que puedes ver y borrar, y los administradores configuran y prueban
+los agentes en el Agent Studio. El plan
 completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido
@@ -70,12 +70,15 @@ datos iniciales; después termina (es normal verlo como «Exited (0)»). Guía e
 ```bash
 python scripts/demo_fase4.py --email tu@empresa.com
 python scripts/demo_fase5.py --email tu@empresa.com
+python scripts/demo_fase5c.py --email tu@empresa.com
 ```
 
 La primera recorre el flujo de negocio (cliente, oportunidad, documento, propuesta con
 revisiones y paquete DOCX). La segunda hace llamadas reales a Claude: sube un pliego de
 ejemplo, pregunta sobre él, lo analiza, redacta una propuesta y muestra el coste (unos
 céntimos; entre 0,30 y 0,80 USD con la propuesta, o unos 0,05 USD con `--sin-propuesta`).
+La tercera conversa con el copiloto: busca oportunidades y, cuando quiere crear una
+propuesta, se para y te pregunta en el terminal si lo apruebas (unos céntimos).
 Referencia de la API en [docs/api.md](docs/api.md).
 
 La primera vez que se construye `ai_service` descarga el modelo de embeddings (unos

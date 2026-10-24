@@ -49,6 +49,7 @@ class CompletionOutcome:
             "provider": self.provider,
             "model": self.result.model if self.result else None,
             "stop_reason": self.result.stop_reason if self.result else None,
+            "content": self.result.content if self.result else None,
             "is_fallback": self.is_fallback,
             "attempts": [asdict(a) for a in self.attempts],
         }
@@ -64,9 +65,19 @@ def parse_json(text: str) -> dict | list:
 
 async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[dict], system: str,
                    messages: list[dict], max_tokens: int, effort: str | None, json_schema: dict | None,
-                   timeout: float, service_type: str) -> CompletionOutcome:
+                   timeout: float, service_type: str, tools: list[dict] | None = None,
+                   on_text=None) -> CompletionOutcome:
     outcome = CompletionOutcome()
+    streamed = {"any": False}
+
+    async def relay(text: str) -> None:
+        streamed["any"] = True
+        await on_text(text)
+
     for position, target in enumerate(targets):
+        if streamed["any"]:
+            # La persona ya ha visto parte de la respuesta: otro modelo empezaría de cero
+            break
         name, model = target["provider"], target["model"]
         provider = providers.get(name)
         if provider is None or not provider.configured:
@@ -84,7 +95,8 @@ async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[di
             try:
                 result = await provider.complete(model=model, system=system, messages=convo,
                                                  max_tokens=max_tokens, effort=effort,
-                                                 json_schema=json_schema, timeout=timeout)
+                                                 json_schema=json_schema, timeout=timeout, tools=tools,
+                                                 on_text=relay if on_text is not None else None)
             except ProviderError as exc:
                 latency = int((time.monotonic() - started) * 1000)
                 outcome.attempts.append(Attempt(name, model, False, latency, error_type=exc.error_type))
@@ -94,7 +106,7 @@ async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[di
                     outcome.rejected = True
                     outcome.error = str(exc)
                     return outcome
-                if exc.error_type not in ("not_configured",):
+                if exc.error_type not in ("not_configured", "no_tool_support"):
                     breaker.record_failure(name)
                 break  # siguiente proveedor de la cadena
 
@@ -129,5 +141,5 @@ async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[di
                      latency_ms=latency, fallback=len(outcome.attempts) > 1)
             return outcome
 
-    outcome.error = "Ningún proveedor de IA disponible"
+    outcome.error = ("La respuesta se interrumpió" if streamed["any"] else "Ningún proveedor de IA disponible")
     return outcome
