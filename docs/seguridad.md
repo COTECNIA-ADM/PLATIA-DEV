@@ -37,12 +37,17 @@ administrador tienen todos los permisos, pero solo dentro de su aplicación.
 @bp.post("/api/proposals")
 @platform_guard                               # 1. sesión válida, rol leído de la BD
 @require_permission("proposals", "write")     # 2. el rol lo permite
-@rate_limit()                                 # 3. 30 peticiones/min por usuario
+@rate_limit("RATE_LIMIT_WRITE")               # 3. 20 escrituras/min por usuario
 def create_proposal():
     ctx = g.security                          # SecurityContext: user_id, app_code, rol...
 ```
 
-Para operaciones de IA usa `@rate_limit("RATE_LIMIT_AI")` (10/min).
+Límites por tipo de operación: `RATE_LIMIT_READ` (60/min), `RATE_LIMIT_WRITE` (20/min),
+`RATE_LIMIT_UPLOAD` (10/min), `RATE_LIMIT_EXPORT` (5/min) y `RATE_LIMIT_AI` (10/min).
+
+El módulo y la acción tienen que estar en `backend/app/security/registry.py`; si no, el
+backend no arranca. Para modificar un registro concreto, además, `ensure_can_modify()`
+comprueba que es tuyo o que tienes la acción `manage` (autorización por objeto).
 
 ## API de autenticación
 

@@ -8,7 +8,7 @@ diferentes. Las razones de cada elección están en [`adr/`](adr/).
 
 | Paso del proceso | Componente |
 | --- | --- |
-| P1 Recepción de documentos | `backend` (subida, versionado) + `celery_worker` (extracción de texto y OCR) |
+| P1 Recepción de documentos | `backend` (subida, versionado) + `celery_ai` (extracción de texto; OCR más adelante) |
 | P2 Análisis | `ai_service` (Claude) + `qdrant` (contexto RAG), lanzado desde la cola `ai` |
 | P3 GO/NO-GO | `backend` lee el análisis persistido y registra la decisión humana |
 | P4 Similares | `qdrant` (búsqueda semántica) |
@@ -29,7 +29,7 @@ flowchart LR
     subgraph backend_net
         B[backend Flask]
         A[ai_service FastAPI]
-        W[celery_worker]
+        W[celery_default / celery_ai / celery_beat]
     end
     subgraph data_net
         M[(MySQL · 3 esquemas)]
@@ -83,8 +83,8 @@ mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service
 | Servicio | Cuándo entra | Motivo |
 | --- | --- | --- |
 | Núcleo de 8 contenedores | Fase 0 (hecho) | Base mínima que permite crecer sin reescribir |
-| `celery_beat` | Fase 4 | Tareas periódicas: limpieza RGPD, escaneo de datos personales, alertas |
-| Workers por cola (`celery_default`, `celery_ai`) | Fase 4–5 | Las tareas de IA no deben competir con las de documentos |
+| `celery_beat` | Fase 4 (hecho) | Tareas periódicas: limpieza RGPD, escaneo de datos personales, alertas |
+| Workers por cola (`celery_default`, `celery_ai`) | Fase 4 (hecho) | Las tareas de IA no deben competir con las de documentos |
 | `meilisearch` | Fase 4 | Búsqueda textual rápida de oportunidades y documentos |
 | `analytics_frontend`, `admin_frontend` | Fase 6 | Audiencias y despliegues distintos |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |

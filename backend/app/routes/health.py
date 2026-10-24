@@ -1,7 +1,8 @@
 """Health checks (Apéndice B, blueprint `health`).
 
 - /api/health       comprobación rápida: base de datos y Redis.
-- /api/health/full  comprobación completa: los 3 esquemas, Redis, Qdrant y el servicio de IA.
+- /api/health/full  comprobación completa: los 3 esquemas, Redis, Qdrant, el servicio de IA
+                    y los workers de Celery.
 
 /api/health es público (lo usan Docker y Nginx). /api/health/full exige sesión y
 el permiso health.read (rol de administración), porque describe la infraestructura.
@@ -79,6 +80,17 @@ def _check_ai_service() -> str | None:
     return None
 
 
+def _check_workers() -> str | None:
+    """Los workers de Celery responden al ping. Si no hay ninguno, la API sigue
+    funcionando pero nada se procesa en segundo plano: degradado, no caído."""
+    from ..queue import celery
+
+    replies = celery.control.ping(timeout=1.0) or []
+    if not replies:
+        return "Ningún worker de Celery responde: los documentos no se procesarán"
+    return None
+
+
 def _summary(services: list[dict]):
     """503 solo si algo está caído; un servicio degradado no tumba la plataforma."""
     statuses = {s["status"] for s in services}
@@ -113,5 +125,6 @@ def full():
             _check("redis", _check_redis),
             _check("qdrant", _check_qdrant),
             _check("ai_service", _check_ai_service),
+            _check("workers", _check_workers),
         ]
     )

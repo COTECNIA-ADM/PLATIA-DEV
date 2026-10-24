@@ -1,4 +1,4 @@
-# Núcleo mínimo de la Plataforma: 8 contenedores en 4 capas.
+# Plataforma: 10 contenedores en 4 capas (más la tarea de migraciones).
 # Versión completa del libro: 17 servicios (Capítulo 4). Se ampliará por fases.
 #
 # Arranque:  python scripts/generate_env.py && docker compose up -d --build
@@ -35,6 +35,18 @@ x-backend-env: &backend-env
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   LOG_FORMAT: ${LOG_FORMAT:-json}
   TIMEZONE: ${TIMEZONE:-Europe/Madrid}
+  RATE_LIMIT_READ: ${RATE_LIMIT_READ:-60}
+  RATE_LIMIT_WRITE: ${RATE_LIMIT_WRITE:-20}
+  RATE_LIMIT_UPLOAD: ${RATE_LIMIT_UPLOAD:-10}
+  RATE_LIMIT_EXPORT: ${RATE_LIMIT_EXPORT:-5}
+  DOCUMENT_STORAGE_PATH: /data/documents
+  DOCUMENT_MAX_MB: ${DOCUMENT_MAX_MB:-100}
+  OPPORTUNITY_FEEDS: ${OPPORTUNITY_FEEDS:-}
+  ALERT_SCORE_THRESHOLD: ${ALERT_SCORE_THRESHOLD:-7.0}
+  DEAL_STALLED_DAYS: ${DEAL_STALLED_DAYS:-14}
+  NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-90}
+  AUDIT_ANONYMIZE_DAYS: ${AUDIT_ANONYMIZE_DAYS:-365}
+  CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-600}
 
 services:
   # ======================================================
@@ -107,6 +119,8 @@ services:
   backend:
     build: ./backend
     environment: *backend-env
+    volumes:
+      - documents_data:/data/documents
     depends_on:
       mysql:
         condition: service_healthy
@@ -140,22 +154,47 @@ services:
     networks: [backend_net, data_net]
 
   # ======================================================
-  # CAPA DE WORKERS: mismo build que el backend
+  # CAPA DE WORKERS (Capítulo 8): mismo build que el backend
   # ======================================================
-  celery_worker:
+  # Colas rápidas: tareas generales, alertas, sincronización y CRM
+  celery_default:
     build: ./backend
-    command: ["celery", "-A", "celery_app", "worker", "-Q", "default,documents,ai", "-c", "2", "--loglevel=info"]
+    command: ["celery", "-A", "celery_app", "worker", "-n", "default@%h", "-Q", "priority,default,sync,crm", "-c", "2", "--loglevel=info"]
     environment: *backend-env
-    depends_on:
+    volumes:
+      - documents_data:/data/documents
+    depends_on: &worker-depends
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
+    mem_limit: 768m
+    restart: unless-stopped
+    networks: [backend_net, data_net]
+
+  # Colas lentas: documentos e IA, para que no bloqueen a las rápidas
+  celery_ai:
+    build: ./backend
+    command: ["celery", "-A", "celery_app", "worker", "-n", "ai@%h", "-Q", "ai,documents", "-c", "2", "--loglevel=info"]
+    environment: *backend-env
+    volumes:
+      - documents_data:/data/documents
+    depends_on: *worker-depends
     mem_limit: 1g
     restart: unless-stopped
     networks: [backend_net, data_net]
+
+  # Planificador de tareas programadas. Una sola instancia (Capítulo 8).
+  celery_beat:
+    build: ./backend
+    command: ["celery", "-A", "celery_app", "beat", "--schedule", "/tmp/celerybeat-schedule", "--loglevel=info"]
+    environment: *backend-env
+    depends_on: *worker-depends
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [data_net]
 
   # ======================================================
   # CAPA DE FRONTALES
@@ -187,6 +226,7 @@ networks:
   data_net:
 
 volumes:
+  documents_data:
   mysql_data:
   redis_data:
   qdrant_data:

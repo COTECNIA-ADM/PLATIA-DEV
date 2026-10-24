@@ -10,7 +10,7 @@ from decimal import Decimal
 import structlog
 
 from .extensions import db
-from .models import App, AppRole, LLMModelPricing, LLMServiceConfig
+from .models import App, AppRole, LLMModelPricing, LLMServiceConfig, ProposalTemplate, ServiceLine
 
 log = structlog.get_logger(__name__)
 
@@ -29,16 +29,23 @@ ROLES = {
     "operations": {
         "admin": ("Administrador de operaciones", True, {}),
         "manager": ("Responsable comercial", False, {
-            "clients": RW, "opportunities": RW, "documents": ["read", "write", "upload"],
-            "proposals": ["read", "write", "delete"], "reports": ["read", "generate"],
+            "clients": ["read", "write", "delete"],
+            "opportunities": ["read", "write", "delete", "manage", "export"],
+            "documents": ["read", "write", "upload", "delete", "manage"],
+            "proposals": ["read", "write", "delete", "manage", "approve", "send"],
+            "templates": RW, "portfolio": RW, "talent": ["read", "write", "delete"],
+            "alerts": RW, "notifications": R, "reports": ["read", "generate"],
             "ai_modules_access": AI_ALL,
         }),
+        # El analista solo modifica lo que tiene asignado (autorización por objeto)
         "analyst": ("Analista", False, {
-            "clients": R, "opportunities": RW, "documents": ["read", "upload"], "proposals": RW,
-            "reports": R, "ai_modules_access": ["document_analyzer", "copilot_chat"],
+            "clients": R, "opportunities": RW, "documents": ["read", "upload", "write"],
+            "proposals": RW, "templates": R, "portfolio": R, "talent": R, "alerts": R,
+            "notifications": R, "reports": R, "ai_modules_access": ["document_analyzer", "copilot_chat"],
         }),
         "viewer": ("Consulta", False, {
             "clients": R, "opportunities": R, "documents": R, "proposals": R, "reports": R,
+            "templates": R, "portfolio": R, "talent": R, "alerts": R, "notifications": R,
             "ai_modules_access": [],
         }),
     },
@@ -52,9 +59,11 @@ ROLES = {
         "superadmin": ("Superadministrador", True, {}),
         "admin": ("Administrador", False, {
             "users": RW, "roles": RW, "llm_config": RW, "prompts": RW, "audit": R, "health": R,
+            "tasks": RW,
         }),
         "auditor": ("Auditor", False, {
             "users": R, "roles": R, "llm_config": R, "prompts": R, "audit": R, "health": R,
+            "tasks": R,
         }),
     },
     "security": {
@@ -63,6 +72,44 @@ ROLES = {
         "viewer": ("Consulta", False, {"audit": R, "alerts": R}),
     },
 }
+
+# Portfolio de partida para puntuar oportunidades (Capítulo 9). Editable desde la API.
+# Prefijos CPV de la UE: 72 servicios TI, 48 paquetes de software, 79411 consultoría de gestión.
+SERVICE_LINES = [
+    ("cloud", "Cloud e infraestructura", ["725", "723", "724"],
+     ["cloud", "nube", "azure", "aws", "kubernetes", "devops", "hosting", "centro de datos",
+      "infraestructura", "migracion"]),
+    ("cyber", "Ciberseguridad", ["72212730", "726"],
+     ["ciberseguridad", "seguridad", "soc", "pentest", "ens", "iso 27001", "siem", "vulnerabilidades"]),
+    ("applications", "Desarrollo de aplicaciones", ["722", "48"],
+     ["desarrollo", "aplicacion", "software", "portal", "web", "movil", "mantenimiento evolutivo"]),
+    ("data", "Datos e IA", ["723", "72316"],
+     ["datos", "analitica", "business intelligence", "inteligencia artificial", "machine learning",
+      "big data", "cuadro de mando"]),
+    ("integration", "Integración", ["7222", "48"],
+     ["integracion", "api", "erp", "middleware", "interoperabilidad", "sap"]),
+    ("consulting", "Consultoría TI", ["7222", "79411"],
+     ["consultoria", "oficina tecnica", "pmo", "itil", "transformacion digital", "asistencia tecnica"]),
+]
+
+# Plantillas de propuesta por tipo: [(clave, título)]
+_BASE = [("resumen_ejecutivo", "Resumen ejecutivo"), ("contexto", "Contexto y necesidades"),
+         ("solucion", "Solución propuesta"), ("metodologia", "Metodología y plan de trabajo"),
+         ("equipo", "Equipo"), ("presupuesto", "Presupuesto")]
+PROPOSAL_TEMPLATES = [
+    ("Propuesta base", "base", _BASE),
+    ("Propuesta competitiva", "competitive",
+     _BASE[:3] + [("diferenciales", "Diferenciales frente a la competencia")] + _BASE[3:]),
+    ("Propuesta premium", "premium",
+     _BASE[:1] + [("valor_estrategico", "Valor estratégico")] + _BASE[1:] +
+     [("gobierno", "Gobierno del servicio y SLA")]),
+    ("Propuesta a medida", "custom", _BASE),
+    ("Propuesta ejecutiva", "executive",
+     [("mensaje_direccion", "Mensaje para la dirección"), ("resumen_ejecutivo", "Resumen ejecutivo"),
+      ("valor_estrategico", "Valor e impacto en el negocio"), ("solucion", "Solución en una página"),
+      ("presupuesto", "Inversión")]),
+]
+
 
 # Modelo por tipo de tarea, con reserva (Cap. 11). Editable desde Admin más adelante.
 LLM_SERVICES = [
@@ -83,7 +130,8 @@ LLM_PRICING = [
 
 
 def run_seeds() -> dict[str, int]:
-    created = {"apps": 0, "roles": 0, "llm_services": 0, "llm_pricing": 0}
+    created = {"apps": 0, "roles": 0, "llm_services": 0, "llm_pricing": 0, "service_lines": 0,
+               "proposal_templates": 0}
 
     apps = {a.code: a for a in db.session.scalars(db.select(App))}
     for code, name, description in APPS:
@@ -128,6 +176,21 @@ def run_seeds() -> dict[str, int]:
                 )
             )
             created["llm_pricing"] += 1
+
+    existing_lines = set(db.session.scalars(db.select(ServiceLine.code)))
+    for code, name, cpv_prefixes, keywords in SERVICE_LINES:
+        if code not in existing_lines:
+            db.session.add(ServiceLine(code=code, name=name, cpv_prefixes=cpv_prefixes, keywords=keywords))
+            created["service_lines"] += 1
+
+    existing_templates = set(db.session.scalars(db.select(ProposalTemplate.name)))
+    for name, proposal_type, sections in PROPOSAL_TEMPLATES:
+        if name not in existing_templates:
+            db.session.add(ProposalTemplate(
+                name=name, proposal_type=proposal_type,
+                sections=[{"key": k, "title": t, "order": i} for i, (k, t) in enumerate(sections)],
+            ))
+            created["proposal_templates"] += 1
 
     db.session.commit()
     log.info("seeds_applied", **created)

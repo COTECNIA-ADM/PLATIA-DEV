@@ -36,8 +36,22 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   (`created_at`, `updated_at`, `created_by`).
 - Cambios de esquema siempre con migraciones Alembic (desde la fase 2).
 - Todo endpoint nuevo lleva `@platform_guard`, `@require_permission(módulo, acción)` y
-  `@rate_limit()` (guía en `docs/seguridad.md`). Permisos siempre desde la BD, nunca del JWT;
+  `@rate_limit(<tipo>)` (guía en `docs/seguridad.md`). Permisos siempre desde la BD, nunca del JWT;
   default-deny.
+- Los permisos nuevos se registran en `backend/app/security/registry.py`: un módulo o acción
+  sin registrar hace fallar el arranque.
+- Blueprints por dominio en `app/routes/` y lógica de negocio en `app/services/`.
+  Entrada validada con un esquema Pydantic de `app/api/schemas.py` (`extra="forbid"`).
+- Contrato de API común (guía en `docs/api.md`): listados con `items` + `pagination`, fechas
+  ISO UTC, errores con excepciones de `app/errors.py` (nunca detalles internos en un 500).
+- Recursos compartidos con bloqueo optimista: el modelo usa `VersionedMixin` y el `PATCH`
+  exige `version` (`check_version`, 409 si no coincide).
+- Autorización por objeto: antes de modificar oportunidades, documentos o propuestas,
+  `ensure_can_modify(módulo, obj)` (responsable o acción `manage`).
+- Rate limit por tipo: `RATE_LIMIT_READ`, `_WRITE`, `_UPLOAD` o `_EXPORT`.
+- Tareas Celery en `app/tasks/`, nombre `tasks.<dominio>.<acción>`, base `PlatformTask`,
+  idempotentes. Se encolan con `enqueue(tarea, ...)`; la cola la decide el routing de
+  `app/queue.py`. Una tarea programada nueva va en `BEAT_SCHEDULE`.
 - Cada llamada a un LLM se registra con modelo, tokens, coste y latencia (desde la fase 5).
 - Los prompts viven en base de datos y se versionan, no en el código (desde la fase 5).
 

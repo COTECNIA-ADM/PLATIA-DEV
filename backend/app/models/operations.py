@@ -21,16 +21,17 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects import mysql
+from sqlalchemy import text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..extensions import db
-from .base import BusinessMixin
+from .base import BusinessMixin, VersionedMixin
 
 BIND = "operations"
 
 
 # ---------------------------------------------------------------- Clientes
-class Client(BusinessMixin, db.Model):
+class Client(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "clients"
 
@@ -51,7 +52,7 @@ class Client(BusinessMixin, db.Model):
     opportunities: Mapped[list["Opportunity"]] = relationship(back_populates="client")
 
 
-class Contact(BusinessMixin, db.Model):
+class Contact(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "contacts"
 
@@ -67,7 +68,7 @@ class Contact(BusinessMixin, db.Model):
 
 
 # ---------------------------------------------------------------- Proyectos y oportunidades
-class Project(BusinessMixin, db.Model):
+class Project(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "projects"
 
@@ -85,12 +86,15 @@ class Project(BusinessMixin, db.Model):
     client: Mapped[Client] = relationship(back_populates="projects")
 
 
-class Opportunity(BusinessMixin, db.Model):
+class Opportunity(VersionedMixin, BusinessMixin, db.Model):
     """Oportunidad de negocio. Doce estados agrupados en cinco fases del embudo."""
 
     __bind_key__ = BIND
     __tablename__ = "opportunities"
-    __table_args__ = (Index("ix_opportunities_status_deadline", "status", "deadline"),)
+    __table_args__ = (
+        Index("ix_opportunities_status_deadline", "status", "deadline"),
+        UniqueConstraint("source", "external_id", name="uq_opportunities_source_external"),
+    )
 
     # estado -> fase del embudo (F1 detección ... F5 cierre)
     STATUS_PHASE = {
@@ -126,6 +130,15 @@ class Opportunity(BusinessMixin, db.Model):
     ai_summary: Mapped[str | None] = mapped_column(Text)
     extra_data: Mapped[dict | None] = mapped_column(JSON)
 
+    # Motor de oportunidades (Capítulo 9): origen externo, deduplicación y relevancia
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+    contracting_entity: Mapped[str | None] = mapped_column(String(255))
+    cpv_codes: Mapped[list | None] = mapped_column(JSON)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    relevance_score: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))  # 0-10
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime)
+
     client: Mapped[Client | None] = relationship(back_populates="opportunities")
     documents: Mapped[list["OpportunityDocument"]] = relationship(back_populates="opportunity")
     proposals: Mapped[list["Proposal"]] = relationship(back_populates="opportunity")
@@ -136,7 +149,7 @@ class Opportunity(BusinessMixin, db.Model):
 
 
 # ---------------------------------------------------------------- Documentos
-class Document(BusinessMixin, db.Model):
+class Document(VersionedMixin, BusinessMixin, db.Model):
     """Documento con versionado y enriquecimiento por IA."""
 
     __bind_key__ = BIND
@@ -168,6 +181,7 @@ class Document(BusinessMixin, db.Model):
     ai_keywords: Mapped[list | None] = mapped_column(JSON)
     ai_entities: Mapped[dict | None] = mapped_column(JSON)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255))
 
     parent_version: Mapped["Document | None"] = relationship(remote_side=[id])
 
@@ -191,7 +205,7 @@ class OpportunityDocument(BusinessMixin, db.Model):
 
 
 # ---------------------------------------------------------------- Propuestas
-class ProposalTemplate(BusinessMixin, db.Model):
+class ProposalTemplate(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "proposal_templates"
 
@@ -203,12 +217,13 @@ class ProposalTemplate(BusinessMixin, db.Model):
     description: Mapped[str | None] = mapped_column(Text)
 
 
-class Proposal(BusinessMixin, db.Model):
+class Proposal(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "proposals"
 
     TYPES = ("base", "competitive", "premium", "custom", "executive")
-    STATUSES = ("draft", "generating", "in_review", "approved", "sent", "rejected")
+    # Máquina de estados en services/proposals.py (Capítulo 9)
+    STATUSES = ("draft", "in_review", "approved", "sent", "won", "lost", "archived")
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     opportunity_id: Mapped[int] = mapped_column(
@@ -223,6 +238,10 @@ class Proposal(BusinessMixin, db.Model):
     reviewed_by: Mapped[int | None] = mapped_column(Integer)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    owner_user_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    # Cada vez que entra en revisión empieza una ronda nueva: las aprobaciones de
+    # rondas anteriores no cuentan
+    review_round: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="proposals")
     template: Mapped[ProposalTemplate | None] = relationship()
@@ -230,9 +249,10 @@ class Proposal(BusinessMixin, db.Model):
         back_populates="proposal", order_by="ProposalSection.position"
     )
     attachments: Mapped[list["ProposalAttachment"]] = relationship(back_populates="proposal")
+    reviews: Mapped[list["ProposalReview"]] = relationship(back_populates="proposal")
 
 
-class ProposalSection(BusinessMixin, db.Model):
+class ProposalSection(VersionedMixin, BusinessMixin, db.Model):
     """Sección de propuesta: lo que generó la IA y lo que editó la persona, por separado."""
 
     __bind_key__ = BIND
@@ -258,8 +278,12 @@ class ProposalAttachment(BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "proposal_attachments"
 
+    KINDS = ("competitive_analysis", "generated", "other")
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="other", server_default="other", nullable=False)
+    file_hash: Mapped[str | None] = mapped_column(String(64))
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str | None] = mapped_column(String(100))
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -268,8 +292,49 @@ class ProposalAttachment(BusinessMixin, db.Model):
     proposal: Mapped[Proposal] = relationship(back_populates="attachments")
 
 
+class ProposalReview(BusinessMixin, db.Model):
+    """Revisión de una propuesta en una ronda. Las premium y ejecutivas necesitan
+    una técnica y una ejecutiva; las custom, la del responsable de área."""
+
+    __bind_key__ = BIND
+    __tablename__ = "proposal_reviews"
+
+    KINDS = ("technical", "executive", "area", "general")
+    DECISIONS = ("approve", "reject")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id"), nullable=False, index=True)
+    review_round: Mapped[int] = mapped_column(Integer, nullable=False)
+    reviewer_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    decision: Mapped[str] = mapped_column(String(10), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+
+    proposal: Mapped[Proposal] = relationship(back_populates="reviews")
+
+
+# ---------------------------------------------------------------- Portfolio de servicios
+class ServiceLine(VersionedMixin, BusinessMixin, db.Model):
+    """Línea de servicio del portfolio: contra ella se puntúan las oportunidades.
+
+    En la fase 4 la relevancia usa palabras clave y códigos CPV; en la fase 5 se
+    añade la similitud semántica con Qdrant (Capítulo 9).
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "service_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    keywords: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    cpv_prefixes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    owner_user_id: Mapped[int | None] = mapped_column(Integer)  # a quién avisar
+
+
 # ---------------------------------------------------------------- Talento (CV)
-class CVProfile(BusinessMixin, db.Model):
+class CVProfile(VersionedMixin, BusinessMixin, db.Model):
     __bind_key__ = BIND
     __tablename__ = "cv_profiles"
 
@@ -357,4 +422,5 @@ class Notification(BusinessMixin, db.Model):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str | None] = mapped_column(Text)
     link: Mapped[str | None] = mapped_column(String(500))  # enlace profundo en el frontal
+    extra_data: Mapped[dict | None] = mapped_column(JSON)
     read_at: Mapped[datetime | None] = mapped_column(DateTime)

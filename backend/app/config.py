@@ -79,7 +79,36 @@ class Config:
         )
         self.QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
         self.HEALTH_TIMEOUT_SECONDS = float(os.environ.get("HEALTH_TIMEOUT_SECONDS", "3"))
+        self.CELERY_BROKER_URL = redis_url("REDIS_DB_CELERY", "1")
         _security_settings(self)
+        _business_settings(self)
+
+
+def _business_settings(cfg, env=None) -> None:
+    """Backend de negocio y colas (Capítulos 7-9)."""
+    env = os.environ if env is None else env
+    # Peticiones por minuto y usuario según el tipo de operación (Capítulo 7)
+    cfg.RATE_LIMIT_READ = int(env.get("RATE_LIMIT_READ", "60"))
+    cfg.RATE_LIMIT_WRITE = int(env.get("RATE_LIMIT_WRITE", "20"))
+    cfg.RATE_LIMIT_UPLOAD = int(env.get("RATE_LIMIT_UPLOAD", "10"))
+    cfg.RATE_LIMIT_EXPORT = int(env.get("RATE_LIMIT_EXPORT", "5"))
+    # Documentos: se guardan en un volumen, nunca con el nombre que envía el usuario
+    cfg.DOCUMENT_STORAGE_PATH = env.get("DOCUMENT_STORAGE_PATH", "/data/documents")
+    cfg.DOCUMENT_MAX_MB = int(env.get("DOCUMENT_MAX_MB", "100"))
+    cfg.MAX_CONTENT_LENGTH = (cfg.DOCUMENT_MAX_MB + 1) * 1024 * 1024
+    # Motor de oportunidades y alertas (Capítulo 9)
+    cfg.OPPORTUNITY_FEEDS = env.get("OPPORTUNITY_FEEDS", "")  # nombre|url separados por comas
+    cfg.FEED_MAX_MB = int(env.get("FEED_MAX_MB", "20"))
+    cfg.ALERT_SCORE_THRESHOLD = float(env.get("ALERT_SCORE_THRESHOLD", "7.0"))
+    cfg.ALERT_LOOKBACK_HOURS = int(env.get("ALERT_LOOKBACK_HOURS", "48"))
+    cfg.DEAL_STALLED_DAYS = int(env.get("DEAL_STALLED_DAYS", "14"))
+    cfg.NOTIFICATION_RETENTION_DAYS = int(env.get("NOTIFICATION_RETENTION_DAYS", "90"))
+    cfg.AUDIT_ANONYMIZE_DAYS = int(env.get("AUDIT_ANONYMIZE_DAYS", "365"))
+    cfg.SESSION_RETENTION_DAYS = int(env.get("SESSION_RETENTION_DAYS", "30"))
+    # Umbral de tareas pendientes por cola antes de avisar (Capítulo 8)
+    cfg.QUEUE_ALERT_THRESHOLDS = env.get("QUEUE_ALERT_THRESHOLDS", "default=50,ai=20,documents=20,automation=10")
+    cfg.TIMEZONE = env.get("TIMEZONE", "Europe/Madrid")
+    cfg.CELERY_TASK_TIME_LIMIT = int(env.get("CELERY_TASK_TIME_LIMIT", "600"))
 
 
 def _security_settings(cfg, env=None) -> None:
@@ -140,3 +169,15 @@ class TestConfig:
                 "BCRYPT_ROUNDS": "4",  # rápido en tests
             },
         )
+        import tempfile
+
+        _business_settings(self, {
+            "DOCUMENT_STORAGE_PATH": tempfile.mkdtemp(prefix="platia-docs-"),
+            "DOCUMENT_MAX_MB": "2",
+            "RATE_LIMIT_WRITE": "200",
+            "RATE_LIMIT_READ": "200",
+            "RATE_LIMIT_UPLOAD": "50",
+        })
+        # Las tareas se ejecutan en línea, sin broker
+        self.CELERY_BROKER_URL = "memory://"
+        self.CELERY_ALWAYS_EAGER = True

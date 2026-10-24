@@ -12,3 +12,7 @@ flask-migrate~=4.1
 flask-jwt-extended~=4.7
 bcrypt~=4.2
 pyotp~=2.9
+pydantic~=2.11
+pypdf~=5.4
+python-docx~=1.1
+defusedxml~=0.7

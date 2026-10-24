@@ -61,3 +61,20 @@ def login(client):
         return {"Authorization": f"Bearer {resp.json['access_token']}"}
 
     return _login
+
+
+@pytest.fixture()
+def as_role(make_user, login):
+    """Crea un usuario con un rol de operaciones y devuelve sus cabeceras."""
+    def _as(role: str, email: str | None = None, extra_roles: dict | None = None):
+        email = email or f"{role}@example.com"
+        user = make_user(email=email, roles={"operations": role, **(extra_roles or {})})
+        headers = login(email)
+        headers["X-User-Id"] = str(user.id)  # solo para los tests; el backend no la lee
+        return headers
+
+    return _as
+
+
+def uid(headers: dict) -> int:
+    return int(headers["X-User-Id"])
