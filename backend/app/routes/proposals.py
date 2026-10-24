@@ -9,10 +9,10 @@ from sqlalchemy.orm import selectinload
 from ..api.common import (apply_changes, check_version, ensure_can_modify, get_active, iso, money,
                           paginate, parse_body, record_audit)
 from ..api.schemas import (GenerateProposalIn, ProposalIn, ProposalPatch, ReviewIn, SectionIn, SectionPatch,
-                           StatusChange)
+                           StatusChange, TailorCVIn)
 from ..errors import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError, ValidationError
 from ..extensions import db
-from ..models import (AuditAction, Opportunity, Proposal, ProposalAttachment, ProposalSection,
+from ..models import (AuditAction, CVProfile, Opportunity, Proposal, ProposalAttachment, ProposalSection,
                       ProposalTemplate)
 from ..queue import PRIORITY_USER, enqueue
 from ..security.audit import audit
@@ -331,3 +331,24 @@ def generate(proposal_id: int):
     targets = service.start_generation(proposal, g.security.user_id, data.sections, data.instructions)
     return jsonify({"id": proposal.id, "generation_status": proposal.generation_status,
                     "sections": [s.key for s in targets]}), 202
+
+
+@proposals_bp.post("/<int:proposal_id>/cv")
+@platform_guard
+@require_permission("proposals", "write")
+@require_ai_module("proposal_generator")
+@rate_limit("RATE_LIMIT_AI")
+def tailor_cv(proposal_id: int):
+    """CV a medida de un perfil para esta propuesta (DOCX y PDF, adjuntos ``kind=cv``).
+
+    Va en segundo plano y avisa con una notificación al terminar."""
+    from ..ai import cv_tailoring
+
+    proposal = _get(proposal_id)
+    ensure_can_modify("proposals", proposal)
+    if not g.security.can("talent", "read"):
+        raise ForbiddenError("Necesitas acceso a los perfiles de talento.")
+    data = parse_body(TailorCVIn)
+    profile = get_active(CVProfile, data.profile_id, "Perfil")
+    cv_tailoring.request(proposal, profile, g.security.user_id)
+    return jsonify({"id": proposal.id, "profile_id": profile.id, "status": "queued"}), 202

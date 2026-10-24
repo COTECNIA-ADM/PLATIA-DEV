@@ -9,8 +9,9 @@
 | 4 | Backend | Blueprints de negocio, colas Celery, tareas programadas, servicios de negocio | 7–10, Ap. B | Hecha |
 | 5a | Núcleo de IA | Factoría con reserva, prompts en BD, costes y presupuestos, guardarraíles, RAG con control de acceso, análisis GO/NO-GO, redacción de propuestas, ROI | 9–12, Ap. C y E | Hecha |
 | 5b | Búsqueda e intención | Meilisearch (búsqueda de texto) y clasificador de intención con Haiku | 13 | Hecha |
-| 5c | Copiloto | Agente con herramientas, chat con streaming (SSE), CV a medida, PDF y PPTX del paquete de propuesta | 14–15 | En revisión |
-| 6 | Frontend | App principal completa; después analytics y admin | 16–17 | Pendiente |
+| 5c | Copiloto | Agente con herramientas, chat con streaming (SSE), CV a medida, PDF y PPTX del paquete de propuesta | 14–15 | Hecha |
+| 6a | Frontend de operaciones | App principal: oportunidades, documentos, propuestas, copiloto, búsqueda, clientes, talento y avisos | 16–17 | En revisión |
+| 6b | Frontend de analytics y admin | Paneles de analítica y administración | 16–17 | Pendiente |
 | 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
 | 8 | Despliegue y operación | CI/CD, `docker-compose.prod.yml`, TLS, observabilidad | 21–22, Ap. D | Pendiente |
 | 9 | BI y documentación | Analytics (heatmap, embudo, ROI) y documentación | 23–24 | Pendiente |

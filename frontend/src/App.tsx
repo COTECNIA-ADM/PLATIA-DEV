@@ -1,143 +1,69 @@
-import { useCallback, useEffect, useState } from 'react'
-import { api, refreshSession, setAccessToken } from './api'
-import Login from './Login'
-import MfaSetup from './MfaSetup'
-import type { HealthResponse, Status, User } from './types'
+import { lazy, Suspense } from 'react'
+import { Route, Routes } from 'react-router'
+import Layout from './components/Layout'
+import { Empty, Spinner } from './components/ui'
+import { useAuth } from './lib/auth'
+import Login from './pages/Login'
 
-const STATUS_TEXT: Record<Status, string> = { healthy: 'OK', degraded: 'Aviso', unhealthy: 'Caído' }
+// Cada pantalla se carga cuando se abre: el primer arranque descarga menos código
+const Home = lazy(() => import('./pages/Home'))
+const Opportunities = lazy(() => import('./pages/Opportunities'))
+const OpportunityDetail = lazy(() => import('./pages/OpportunityDetail'))
+const Documents = lazy(() => import('./pages/Documents'))
+const DocumentDetail = lazy(() => import('./pages/DocumentDetail'))
+const Proposals = lazy(() => import('./pages/Proposals'))
+const ProposalDetail = lazy(() => import('./pages/ProposalDetail'))
+const Copilot = lazy(() => import('./pages/Copilot'))
+const Clients = lazy(() => import('./pages/Clients'))
+const ClientDetail = lazy(() => import('./pages/ClientDetail'))
+const Talent = lazy(() => import('./pages/Talent'))
+const ProfileDetail = lazy(() => import('./pages/ProfileDetail'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const Search = lazy(() => import('./pages/Search'))
+const Account = lazy(() => import('./pages/Account'))
+const Health = lazy(() => import('./pages/Health'))
 
-const LABELS: Record<string, string> = {
-  database_platform: 'MySQL · platform_core',
-  database_operations: 'MySQL · operations_db',
-  database_analytics: 'MySQL · analytics_db',
-  redis: 'Redis',
-  qdrant: 'Qdrant',
-  ai_service: 'Servicio de IA',
-  workers: 'Workers de Celery',
-}
-
-// El estado completo de la infraestructura solo lo ve quien tiene acceso a la app admin
-function canSeeFullHealth(user: User | null) {
-  return !!user && user.apps.some((a) => a.code === 'admin')
+function NotFound() {
+  return <Empty title="Esta página no existe">Vuelve al inicio desde el menú.</Empty>
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [checkingSession, setCheckingSession] = useState(true)
-  const [health, setHealth] = useState<HealthResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [showMfa, setShowMfa] = useState(false)
-
-  const loadHealth = useCallback(async (current: User | null) => {
-    setError(null)
-    try {
-      if (canSeeFullHealth(current)) {
-        setHealth(await api<HealthResponse>('/api/health/full', { app: 'admin' }))
-      } else {
-        const resp = await fetch('/api/health')
-        setHealth((await resp.json()) as HealthResponse)
-      }
-    } catch {
-      setError('No se pudo contactar con el backend.')
-    }
-  }, [])
-
-  const loadMe = useCallback(async () => {
-    const me = await api<{ user: User }>('/api/auth/me')
-    setUser(me.user)
-    return me.user
-  }, [])
-
-  // Al abrir la página se intenta recuperar la sesión con la cookie de refresco
-  useEffect(() => {
-    void (async () => {
-      let current: User | null = null
-      if (await refreshSession()) {
-        current = await loadMe().catch(() => null)
-      }
-      setCheckingSession(false)
-      await loadHealth(current)
-    })()
-  }, [loadHealth, loadMe])
-
-  async function logout() {
-    await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
-    setAccessToken(null)
-    setUser(null)
-    await loadHealth(null)
+  const { user, loading } = useAuth()
+  if (loading) return <Spinner label="Recuperando la sesión…" />
+  if (!user) {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <Routes>
+          <Route path="status" element={<div className="content"><Health /></div>} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </Suspense>
+    )
   }
-
   return (
-    <main>
-      <header>
-        <div>
-          <h1>PLATIA</h1>
-          <p className="subtitle">Estado de la plataforma</p>
-        </div>
-        {user && (
-          <div className="session">
-            <span>{user.full_name}</span>
-            <button className="link" onClick={() => void logout()}>
-              Cerrar sesión
-            </button>
-          </div>
-        )}
-      </header>
-
-      {!checkingSession && !user && (
-        <Login
-          onLogin={(u) => {
-            setUser(u)
-            void loadHealth(u)
-          }}
-        />
-      )}
-
-      {user && (
-        <section className="card">
-          <h2>Tus accesos</h2>
-          <ul className="apps">
-            {user.is_superadmin && <li>Superadministrador: acceso total</li>}
-            {user.apps.map((a) => (
-              <li key={a.code}>
-                {a.name}: <strong>{a.role}</strong>
-              </li>
-            ))}
-          </ul>
-          {user.mfa_enabled ? (
-            <p>MFA activado ✔</p>
-          ) : showMfa ? (
-            <MfaSetup
-              onDone={() => {
-                setShowMfa(false)
-                void loadMe()
-              }}
-            />
-          ) : (
-            <p className="warning">
-              Tu cuenta no tiene MFA. <button className="link" onClick={() => setShowMfa(true)}>Activarlo</button>
-            </p>
-          )}
-        </section>
-      )}
-
-      <h2>{canSeeFullHealth(user) ? 'Estado completo' : 'Estado básico'}</h2>
-      {error && <p className="error">{error}</p>}
-      {health && (
-        <ul className="services">
-          {health.services.map((s) => (
-            <li key={s.name} className={s.status}>
-              <span>
-                {LABELS[s.name] ?? s.name}
-                {s.detail && <small>{s.detail}</small>}
-                {s.error && <small>Error: {s.error}. Revisa: docker compose logs</small>}
-              </span>
-              <strong>{STATUS_TEXT[s.status]}</strong>
-            </li>
-          ))}
-        </ul>
-      )}
-      <button onClick={() => void loadHealth(user)}>Comprobar de nuevo</button>
-    </main>
+    <Suspense fallback={<Spinner />}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="opportunities" element={<Opportunities />} />
+          <Route path="opportunities/:id" element={<OpportunityDetail />} />
+          <Route path="documents" element={<Documents />} />
+          <Route path="documents/:id" element={<DocumentDetail />} />
+          <Route path="proposals" element={<Proposals />} />
+          <Route path="proposals/:id" element={<ProposalDetail />} />
+          <Route path="copilot" element={<Copilot />} />
+          <Route path="copilot/:id" element={<Copilot />} />
+          <Route path="clients" element={<Clients />} />
+          <Route path="clients/:id" element={<ClientDetail />} />
+          <Route path="talent" element={<Talent />} />
+          <Route path="talent/:id" element={<ProfileDetail />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="search" element={<Search />} />
+          <Route path="account" element={<Account />} />
+          <Route path="status" element={<Health />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }
