@@ -44,7 +44,7 @@ TASK_ANNOTATIONS = {
 }
 
 # Tareas programadas (Celery Beat). Las pesadas, de madrugada. Las que dependen
-# de la IA, Meilisearch o el CRM se añadirán en sus fases.
+# de Meilisearch o del CRM se añadirán en sus fases.
 BEAT_SCHEDULE = {
     "scan-new-opportunities": {
         "task": "tasks.sync.scan_opportunities",
@@ -78,10 +78,35 @@ BEAT_SCHEDULE = {
         "task": "tasks.system.platform_health_check",
         "schedule": 300.0,  # cada 5 minutos
     },
+    # --- Gobernanza de IA (fase 5, Capítulos 11 y 12)
+    "verify-prompt-integrity": {
+        "task": "tasks.ai.verify_prompt_integrity",
+        "schedule": crontab(minute=10, hour="*/12"),
+    },
+    "scan-pii-in-ai-outputs": {
+        "task": "tasks.ai.scan_pii_outputs",
+        "schedule": crontab(minute=20, hour="*/6"),
+    },
+    "check-ai-budgets": {
+        "task": "tasks.ai.check_budgets",
+        "schedule": crontab(minute=5),  # cada hora
+    },
+    "recover-unindexed-documents": {
+        "task": "tasks.ai.recover_index",
+        "schedule": crontab(minute="7-59/15"),
+    },
+    "rag-consistency-check": {
+        "task": "tasks.ai.rag_consistency",
+        "schedule": crontab(minute=0, hour=4, day_of_week="sun"),
+    },
+    "cleanup-ai-output-samples": {
+        "task": "tasks.ai.cleanup_usage_samples",
+        "schedule": crontab(minute=40, hour=3),
+    },
 }
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
-                "app.tasks.system"]
+                "app.tasks.system", "app.tasks.ai"]
 
 _flask_app: Flask | None = None
 

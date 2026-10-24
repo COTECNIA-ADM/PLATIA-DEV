@@ -40,11 +40,34 @@ def _key(line: str) -> str | None:
     return stripped.split("=", 1)[0].strip()
 
 
+# Valores de fases anteriores que ya no son válidos: (variable, valores viejos, valor nuevo)
+OBSOLETE = [
+    ("EMBEDDING_PROVIDER", {"openai", "azure", "ollama"}, "local"),  # fase 5: embeddings locales
+]
+
+
+def _migrate_obsolete(text: str) -> tuple[str, list[str]]:
+    lines, changed = text.splitlines(), []
+    for i, line in enumerate(lines):
+        key = _key(line)
+        for name, old_values, new_value in OBSOLETE:
+            if key == name:
+                value = line.split("=", 1)[1].split("#", 1)[0].strip()
+                if value in old_values:
+                    lines[i] = f"{name}={new_value}"
+                    changed.append(f"{name}: {value} -> {new_value}")
+    return "\n".join(lines) + "\n", changed
+
+
 def update() -> int:
     if not TARGET.exists():
         print(f"No existe {TARGET}. Ejecuta primero: python scripts/generate_env.py")
         return 1
-    current = TARGET.read_text(encoding="utf-8")
+    current, migrated = _migrate_obsolete(TARGET.read_text(encoding="utf-8"))
+    for change in migrated:
+        print(f"Actualizado {change}")
+    if migrated:
+        TARGET.write_text(current, encoding="utf-8", newline="\n")
     existing = {_key(line) for line in current.splitlines()}
     added = [fill(line) for line in EXAMPLE.read_text(encoding="utf-8").splitlines()
              if _key(line) and _key(line) not in existing]

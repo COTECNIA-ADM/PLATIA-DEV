@@ -7,8 +7,9 @@ from app.seeds import run_seeds
 
 def test_seeds_create_base_data(app):
     created = run_seeds()
-    assert created == {"apps": 4, "roles": 13, "llm_services": 4, "llm_pricing": 3,
-                       "service_lines": 6, "proposal_templates": 5}
+    assert created == {"apps": 4, "roles": 13, "llm_services": 7, "llm_pricing": 3,
+                       "service_lines": 6, "proposal_templates": 5, "prompts": 6, "budgets": 3,
+                       "human_baselines": 4}
     codes = {a.code for a in db.session.scalars(db.select(App))}
     assert codes == {"operations", "analytics", "admin", "security"}
     assert db.session.get(LLMServiceConfig, "proposal_generation").fallback_model
@@ -52,3 +53,18 @@ def test_seeded_templates_are_valid(app):
     assert {t.proposal_type for t in templates} == {"base", "competitive", "premium", "custom", "executive"}
     for t in templates:
         TemplateIn.model_validate({"name": t.name, "proposal_type": t.proposal_type, "sections": t.sections})
+
+
+def test_seeded_services_point_to_seeded_prompts(app):
+    """Cada servicio con prompt tiene una versión activa, y el prompt usa variables conocidas."""
+    from app.ai import prompts
+    from app.models import Prompt
+
+    run_seeds()
+    for config in db.session.scalars(db.select(LLMServiceConfig)):
+        if config.prompt_name:
+            active = prompts.get_active(config.prompt_name)
+            assert active.version == 1 and active.content_hash
+            # Las instrucciones estables no llevan variables (así se pueden cachear)
+            assert prompts.variables_of(active.system_prompt) == set()
+    assert db.session.scalar(db.select(db.func.count()).select_from(Prompt)) == 6

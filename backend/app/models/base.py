@@ -67,3 +67,23 @@ class VersionedMixin:
     @declared_attr.directive
     def __mapper_args__(cls):
         return {"version_id_col": cls.row_version}
+
+    def set_system_fields(self, **values) -> None:
+        """Escribe campos que mantienen los procesos en segundo plano (indexado,
+        enriquecimiento con IA, estado de una redacción).
+
+        No cuentan como una edición: no cambian ``row_version`` ni fallan si otra
+        tarea o una persona ha guardado a la vez otros campos del registro. Así
+        indexar y enriquecer el mismo documento en paralelo no choca, y quien está
+        editando no recibe un 409 por un cambio que no ha hecho nadie. No hace commit.
+        """
+        from sqlalchemy import update
+        from sqlalchemy.orm.attributes import set_committed_value
+
+        from ..extensions import db
+
+        cls = type(self)
+        db.session.execute(update(cls).where(cls.id == self.id).values(**values)
+                           .execution_options(synchronize_session=False))
+        for key, value in values.items():
+            set_committed_value(self, key, value)

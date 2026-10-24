@@ -44,10 +44,17 @@ def process_upload(self, document_id: int) -> dict:
                 return {"document_id": document_id, "status": "failed"}
             document.processing_status = "processed"
             document.processed_at = utcnow()
+            if document.extracted_text:
+                document.index_status = "pending"
             db.session.commit()
             log.info("document_processed", document_id=document_id, chars=len(text or "") if
                      document.extracted_text else 0)
-            return {"document_id": document_id, "status": "processed"}
+        if document.extracted_text:
+            # Fase 5: vectorizar para RAG y enriquecer con IA (cola ai)
+            from .ai import after_document_processed
+
+            after_document_processed(document_id)
+        return {"document_id": document_id, "status": "processed"}
     except TaskAlreadyRunning:
         return {"document_id": document_id, "status": "already_running"}
     except Exception as exc:

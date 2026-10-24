@@ -48,12 +48,23 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   exige `version` (`check_version`, 409 si no coincide).
 - Autorización por objeto: antes de modificar oportunidades, documentos o propuestas,
   `ensure_can_modify(módulo, obj)` (responsable o acción `manage`).
-- Rate limit por tipo: `RATE_LIMIT_READ`, `_WRITE`, `_UPLOAD` o `_EXPORT`.
+- Rate limit por tipo: `RATE_LIMIT_READ`, `_WRITE`, `_UPLOAD`, `_EXPORT` o `_AI`.
 - Tareas Celery en `app/tasks/`, nombre `tasks.<dominio>.<acción>`, base `PlatformTask`,
   idempotentes. Se encolan con `enqueue(tarea, ...)`; la cola la decide el routing de
   `app/queue.py`. Una tarea programada nueva va en `BEAT_SCHEDULE`.
-- Cada llamada a un LLM se registra con modelo, tokens, coste y latencia (desde la fase 5).
-- Los prompts viven en base de datos y se versionan, no en el código (desde la fase 5).
+- Toda llamada a un LLM pasa por `app/ai/gateway.run(tipo_de_tarea, ...)`: aplica
+  presupuestos, carga el prompt activo y registra cada intento con modelo, tokens, coste y
+  latencia (ADR-011). Nunca llamar al servicio de IA para generar texto por otra vía.
+- Los prompts viven en base de datos y se versionan, no en el código. Las versiones
+  iniciales están en `backend/app/prompt_seeds/` (solo para `flask seed`); las variables se
+  escriben `{{variable}}` y van en la plantilla del usuario, no en la de sistema.
+- Un endpoint de IA añade `@require_ai_module(<módulo>)` tras `@require_permission`.
+- La IA solo recibe documentos que la persona puede ver: usar `app/ai/access.Viewer`
+  (filtro en MySQL, en Qdrant y otra vez sobre los resultados).
+- Texto libre del usuario hacia la IA: `guardrails.check_input`; respuesta mostrada:
+  `guardrails.check_output`.
+- Campos que escriben las tareas en segundo plano (indexado, IA): `obj.set_system_fields(...)`,
+  que no cambia `row_version`.
 
 ## Lo que NO hacer
 - No hardcodear IDs de tenant, API keys, contraseñas ni secretos.

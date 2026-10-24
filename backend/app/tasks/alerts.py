@@ -7,7 +7,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Alert, Opportunity, Proposal, ServiceLine, utcnow
-from ..queue import PlatformTask, celery
+from ..queue import PRIORITY_MAINTENANCE, PlatformTask, celery, enqueue
 from ..services import opportunities as opp_service
 from ..services.notifications import notify, notify_many, operations_managers
 
@@ -31,8 +31,12 @@ def proactive_scan(self) -> dict:
         ).limit(1000)
     ).all()
     alerts = 0
+    to_index: list[int] = []
+    vector_threshold = current_app.config.get("OPPORTUNITY_VECTOR_THRESHOLD", 7.0)
     for opp in recent:
         best = opp_service.score_opportunity(opp, lines)
+        if best is not None and best["score"] >= vector_threshold:
+            to_index.append(opp.id)
         if best is None or best["score"] < threshold:
             continue
         already = db.session.scalar(db.select(Alert.id).filter_by(
@@ -49,6 +53,11 @@ def proactive_scan(self) -> dict:
                     link=f"/opportunities/{opp.id}", extra_data=best)
         alerts += 1
     db.session.commit()
+    # Las relevantes se vectorizan para "oportunidades parecidas" (fase 5)
+    from .ai import index_opportunity
+
+    for opp_id in to_index:
+        enqueue(index_opportunity, opp_id, priority=PRIORITY_MAINTENANCE)
     log.info("proactive_scan_done", scored=len(recent), alerts=alerts)
     return {"scored": len(recent), "alerts": alerts}
 

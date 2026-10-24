@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -182,8 +183,29 @@ class Document(VersionedMixin, BusinessMixin, db.Model):
     ai_entities: Mapped[dict | None] = mapped_column(JSON)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime)
     celery_task_id: Mapped[str | None] = mapped_column(String(255))
+    ai_enriched_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # Control de acceso por objeto (Capítulo 12). Vacío = lo ve cualquiera con
+    # documents.read. Con roles = solo el propietario, esos roles de operaciones y
+    # quien tenga documents.manage. Se copia al payload de Qdrant.
+    allowed_roles: Mapped[list | None] = mapped_column(JSON(none_as_null=True))
+
+    # Indexado semántico en Qdrant (colección "documents")
+    INDEX_STATUSES = ("none", "pending", "indexed", "failed", "skipped")
+    index_status: Mapped[str] = mapped_column(String(10), default="none", server_default="none", nullable=False)
+    vector_count: Mapped[int | None] = mapped_column(Integer)
+    embedding_model: Mapped[str | None] = mapped_column(String(100))
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     parent_version: Mapped["Document | None"] = relationship(remote_side=[id])
+
+    @property
+    def owner_user_id(self) -> int | None:
+        return self.created_by
+
+    @property
+    def is_restricted(self) -> bool:
+        return bool(self.allowed_roles)
 
 
 class OpportunityDocument(BusinessMixin, db.Model):
@@ -242,6 +264,12 @@ class Proposal(VersionedMixin, BusinessMixin, db.Model):
     # Cada vez que entra en revisión empieza una ronda nueva: las aprobaciones de
     # rondas anteriores no cuentan
     review_round: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    # Redacción con IA en segundo plano (fase 5)
+    GENERATION_STATUSES = ("idle", "queued", "running", "done", "failed")
+    generation_status: Mapped[str] = mapped_column(String(10), default="idle", server_default="idle",
+                                                   nullable=False)
+    generation_error: Mapped[str | None] = mapped_column(String(500))
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="proposals")
     template: Mapped[ProposalTemplate | None] = relationship()
@@ -311,6 +339,38 @@ class ProposalReview(BusinessMixin, db.Model):
     comment: Mapped[str | None] = mapped_column(Text)
 
     proposal: Mapped[Proposal] = relationship(back_populates="reviews")
+
+
+# ---------------------------------------------------------------- Análisis con IA (fase 5)
+class AIAnalysis(BusinessMixin, db.Model):
+    """Resultado de un análisis GO/NO-GO de un documento o de una oportunidad.
+
+    Se guarda como registro propio (ADR-004): otros flujos lo leen sin repetir la
+    llamada a Claude, y queda trazado con qué modelo y versión de prompt se hizo.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "ai_analyses"
+    __table_args__ = (Index("ix_ai_analyses_subject", "subject_type", "subject_id", "created_at"),)
+
+    SUBJECTS = ("document", "opportunity")
+    STATUSES = ("queued", "running", "done", "failed")
+    VERDICTS = ("GO", "NO_GO", "CONDITIONAL")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="queued", nullable=False)
+    verdict: Mapped[str | None] = mapped_column(String(12))
+    confidence: Mapped[float | None] = mapped_column(Float)
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(String(500))
+    model_name: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[int | None] = mapped_column(Integer)
+    llm_usage_log_id: Mapped[int | None] = mapped_column(BigInteger)  # platform_core.llm_usage_log
+    correlation_id: Mapped[str | None] = mapped_column(String(64))
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 # ---------------------------------------------------------------- Portfolio de servicios

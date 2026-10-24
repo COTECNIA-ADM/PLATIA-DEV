@@ -9,6 +9,8 @@ from app.models import App, AppRole, User, UserAppMembership
 from app.security.passwords import hash_password
 from app.seeds import run_seeds
 
+from fake_ai import FakeAIClient
+
 PASSWORD = "Contrasena-Segura-123"
 
 
@@ -18,11 +20,17 @@ def app():
     structlog.contextvars.clear_contextvars()
     app = create_app(TestConfig())
     app.extensions["redis"] = fakeredis.FakeRedis()
+    app.extensions["ai_client"] = FakeAIClient()  # sin red ni coste
     with app.app_context():
         db.create_all()
         yield app
         db.session.remove()
         db.drop_all()
+
+
+@pytest.fixture()
+def ai(app) -> FakeAIClient:
+    return app.extensions["ai_client"]
 
 
 @pytest.fixture()

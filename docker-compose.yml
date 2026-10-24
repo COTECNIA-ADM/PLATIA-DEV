@@ -47,6 +47,16 @@ x-backend-env: &backend-env
   NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-90}
   AUDIT_ANONYMIZE_DAYS: ${AUDIT_ANONYMIZE_DAYS:-365}
   CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-600}
+  # Núcleo de IA (fase 5). El modelo de cada tarea se elige en Admin, no aquí.
+  AI_ENABLED: ${AI_ENABLED:-true}
+  AI_AUTO_ENRICH: ${AI_AUTO_ENRICH:-true}
+  RATE_LIMIT_AI: ${RATE_LIMIT_AI:-10}
+  RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.35}
+  RAG_MAX_CHUNKS: ${RAG_MAX_CHUNKS:-6}
+  RAG_EVAL_SAMPLE_RATE: ${RAG_EVAL_SAMPLE_RATE:-0.05}
+  SEMANTIC_SCORING: ${SEMANTIC_SCORING:-true}
+  AI_SAMPLE_RETENTION_DAYS: ${AI_SAMPLE_RETENTION_DAYS:-30}
+  AI_USD_EUR_RATE: ${AI_USD_EUR_RATE:-0.92}
 
 services:
   # ======================================================
@@ -144,11 +154,25 @@ services:
       AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CLAUDE_DEFAULT_MODEL: ${CLAUDE_DEFAULT_MODEL:-claude-sonnet-5-5}
+      CLAUDE_PREMIUM_MODEL: ${CLAUDE_PREMIUM_MODEL:-claude-opus-5-5}
+      CLAUDE_FAST_MODEL: ${CLAUDE_FAST_MODEL:-claude-haiku-5-5}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-180}
+      FALLBACK_LLM_BASE_URL: ${FALLBACK_LLM_BASE_URL:-}
+      FALLBACK_LLM_API_KEY: ${FALLBACK_LLM_API_KEY:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       QDRANT_HOST: qdrant
       QDRANT_PORT: "6333"
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on: [qdrant]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/health', headers={'X-API-Key': os.environ['AI_SERVICE_API_KEY']}), timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     mem_limit: 2g
     restart: unless-stopped
     networks: [backend_net, data_net]

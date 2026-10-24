@@ -20,6 +20,7 @@ from ..extensions import db
 from ..models import App, AppRole, AuditAction, User, UserAppMembership
 from .audit import audit
 from .redis_store import get_redis
+from .registry import AI_MODULES
 from .registry import check as check_registered
 
 log = structlog.get_logger(__name__)
@@ -140,6 +141,28 @@ def require_permission(module: str, action: str):
             if not ctx.can(module, action):
                 return _deny(403, "Permiso insuficiente.", ctx.user_id,
                              app=ctx.app_code, permission=f"{module}.{action}")
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def require_ai_module(name: str):
+    """Acceso a un módulo de IA (``ai_modules_access`` del rol). Va después de
+    ``require_permission``: el módulo de IA no sustituye al permiso sobre los datos."""
+    if name not in AI_MODULES:
+        raise LookupError(f"Módulo de IA desconocido '{name}'. Añádelo a app/security/registry.py.")
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            ctx: SecurityContext | None = g.get("security")
+            if ctx is None:
+                return _deny(401, "Autenticación requerida.")
+            if not ctx.is_admin and name not in ctx.ai_modules():
+                return _deny(403, "Tu rol no tiene acceso a esta función de IA.", ctx.user_id,
+                             app=ctx.app_code, ai_module=name)
             return fn(*args, **kwargs)
 
         return wrapper
