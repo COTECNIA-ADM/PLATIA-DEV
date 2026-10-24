@@ -172,6 +172,8 @@ def me():
         user=_user_payload(g.current_user),
         active_app={"code": ctx.app_code, "role": ctx.role_code, "is_admin": ctx.is_admin,
                     "permissions": ctx.permissions},
+        # Los costes de IA se guardan en dólares (precio del proveedor) y se muestran en euros
+        settings={"currency": "EUR", "usd_eur_rate": current_app.config.get("AI_USD_EUR_RATE", 0.92)},
     )
 
 

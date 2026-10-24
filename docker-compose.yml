@@ -72,6 +72,18 @@ x-backend-env: &backend-env
   MEMORY_MAX_PER_USER: ${MEMORY_MAX_PER_USER:-50}
   MEMORY_INJECT: ${MEMORY_INJECT:-10}
   MEMORY_EXTRACT_ENABLED: ${MEMORY_EXTRACT_ENABLED:-true}
+  # Correo de avisos (fase 8)
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-PLATIA}
+  EMAIL_PRIORITIES: ${EMAIL_PRIORITIES:-high,urgent}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+  SERVER_NAME: ${SERVER_NAME:-}
+  AI_DISCLOSURE_TEXT: ${AI_DISCLOSURE_TEXT-Documento elaborado con ayuda de inteligencia artificial y revisado por el equipo.}
 
 services:
   # ======================================================
@@ -275,6 +287,7 @@ services:
       - "${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
     depends_on: [backend, frontend]
     mem_limit: 256m
     restart: unless-stopped

@@ -4,9 +4,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, refreshSession, setAccessToken } from './api'
+import { setUsdEurRate } from './format'
 import type { ActiveApp, User } from './types'
 
-type Me = { user: User; active_app: ActiveApp }
+type Me = { user: User; active_app: ActiveApp; settings?: { currency: string; usd_eur_rate: number } }
 
 type AuthState = {
   user: User | null
@@ -37,7 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      setMe(await api<Me>('/api/auth/me'))
+      const data = await api<Me>('/api/auth/me')
+      setUsdEurRate(data.settings?.usd_eur_rate)
+      setMe(data)
       setDenied(false)
     } catch (err) {
       // 403: la sesión es buena, pero esta persona no tiene rol en esta aplicación

@@ -1,7 +1,7 @@
 // Valor de la IA para el negocio: horas ahorradas y ahorro neto frente a lo que cuesta.
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
-import { fmtMoney } from '../lib/format'
+import { fmtAiCost, fmtMoney, usdToEur } from '../lib/format'
 import { ChartCard, ColumnChart, type Series } from '../components/charts'
 import { Empty, ErrorBox, Spinner, Stat } from '../components/ui'
 import { PeriodPicker, monthLabel, usePeriod } from './common'
@@ -24,8 +24,8 @@ export const SERVICE_TYPES: Record<string, string> = {
   proposal_deck: 'Presentación de la propuesta',
 }
 
-const COST: Series[] = [{ key: 'cost', label: 'Gasto (USD)', color: 'var(--series-1)' }]
-const usd = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+const COST: Series[] = [{ key: 'cost', label: 'Gasto (€)', color: 'var(--series-1)' }]
+const eurFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
 
 export default function AIValue() {
   const [months, setMonths] = usePeriod()
@@ -55,7 +55,7 @@ export default function AIValue() {
         <Stat label="Tareas hechas con IA" value={t.tasks.toLocaleString('es-ES')} />
         <Stat label="Horas ahorradas" value={t.hours_saved.toLocaleString('es-ES')} />
         <Stat label="Ahorro neto" value={fmtMoney(t.net_saving_eur)} hint="Ya descontado el coste de la IA" />
-        <Stat label="Coste de la IA" value={fmtMoney(t.cost_eur)} hint="En euros, al cambio configurado" />
+        <Stat label="Coste de la IA" value={eurFmt.format(Number(t.cost_eur))} hint="En euros, al cambio configurado" />
       </div>
       <div className="home-grid">
         <section className="card">
@@ -82,7 +82,7 @@ export default function AIValue() {
                       <td className="num">{s.tasks}</td>
                       <td className="num">{s.hours_saved.toLocaleString('es-ES')}</td>
                       <td className="num">{fmtMoney(s.net_saving_eur)}</td>
-                      <td className="num">{fmtMoney(s.cost_eur)}</td>
+                      <td className="num">{eurFmt.format(Number(s.cost_eur))}</td>
                       <td className="num">{s.avg_user_rating ?? '—'}</td>
                     </tr>
                   ))}
@@ -97,7 +97,7 @@ export default function AIValue() {
         </section>
         <ChartCard
           title="Gasto en IA por mes"
-          subtitle="Todas las llamadas a modelos, en dólares como las factura el proveedor"
+          subtitle="Todas las llamadas a modelos, en euros al cambio configurado"
           table={
             <table className="table table-compact">
               <thead>
@@ -112,7 +112,7 @@ export default function AIValue() {
                   <tr key={m.month}>
                     <td>{monthLabel(m.month)}</td>
                     <td className="num">{m.calls}</td>
-                    <td className="num">{usd.format(Number(m.cost_usd))}</td>
+                    <td className="num">{fmtAiCost(m.cost_usd)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -122,8 +122,8 @@ export default function AIValue() {
           <ColumnChart
             categories={data.monthly.map((m) => ({ key: m.month, label: monthLabel(m.month) }))}
             series={COST}
-            values={Object.fromEntries(data.monthly.map((m) => [m.month, { cost: Number(m.cost_usd) }]))}
-            format={(n) => usd.format(n)}
+            values={Object.fromEntries(data.monthly.map((m) => [m.month, { cost: usdToEur(Number(m.cost_usd)) }]))}
+            format={(n) => eurFmt.format(n)}
           />
         </ChartCard>
       </div>

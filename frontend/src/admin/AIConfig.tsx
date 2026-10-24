@@ -5,12 +5,12 @@ import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { fmtDate } from '../lib/format'
+import { eurToUsd, fmtDate, usdToEur } from '../lib/format'
 import { Meter } from '../components/charts'
 import { Badge, Empty, ErrorBox, Field, Modal, Spinner, Stat, errorMessage, useToast } from '../components/ui'
 import { SERVICE_TYPES } from '../analytics/AIValue'
 import { DaysPicker, Tabs, pct, useTab } from './common'
-import { BUDGET_SCOPE, COMPLIANCE_EVENTS, perPerson, usd } from './labels'
+import { BUDGET_SCOPE, COMPLIANCE_EVENTS, eur, perPerson, usd } from './labels'
 import type { AIHealth, Baseline, Budget, Compliance, Pricing, QualityRow, RagCollections, ServiceConfig, UsageRow } from './types'
 
 const TABS = ['models', 'budgets', 'usage', 'pricing', 'quality', 'compliance', 'rag'] as const
@@ -199,14 +199,23 @@ function Models() {
 }
 
 // ---------------------------------------------------------------- Presupuestos
+function limitToEur(usd: string | null | undefined): string {
+  return usd ? usdToEur(Number(usd)).toFixed(2) : ''
+}
+
+function limitToUsd(eur: string): string | null {
+  return eur ? eurToUsd(Number(eur)).toFixed(2) : null
+}
+
 function BudgetForm({ budget, onClose }: { budget?: Budget; onClose: () => void }) {
   const qc = useQueryClient()
   const services = useQuery({ queryKey: ['admin', 'services'], queryFn: () => api<{ items: ServiceConfig[] }>('/api/admin/ai/services') })
   const [form, setForm] = useState({
     scope: budget?.scope ?? 'global',
     scope_id: budget?.scope_id ?? '',
-    daily_limit_usd: budget?.daily_limit_usd ?? '',
-    monthly_limit_usd: budget?.monthly_limit_usd ?? '',
+    // Los límites se escriben en euros y se guardan en dólares (la unidad de los precios)
+    daily_limit_eur: limitToEur(budget?.daily_limit_usd),
+    monthly_limit_eur: limitToEur(budget?.monthly_limit_usd),
     alert_threshold_pct: String(budget?.alert_threshold_pct ?? 80),
     throttle_threshold_pct: String(budget?.throttle_threshold_pct ?? 95),
     block_threshold_pct: String(budget?.block_threshold_pct ?? 100),
@@ -214,11 +223,12 @@ function BudgetForm({ budget, onClose }: { budget?: Budget; onClose: () => void 
   })
   const save = useMutation({
     mutationFn: () => {
+      const { daily_limit_eur, monthly_limit_eur, ...rest } = form
       const body = {
-        ...form,
+        ...rest,
         scope_id: form.scope === 'global' ? '' : form.scope_id,
-        daily_limit_usd: form.daily_limit_usd || null,
-        monthly_limit_usd: form.monthly_limit_usd || null,
+        daily_limit_usd: limitToUsd(daily_limit_eur),
+        monthly_limit_usd: limitToUsd(monthly_limit_eur),
         alert_threshold_pct: Number(form.alert_threshold_pct),
         throttle_threshold_pct: Number(form.throttle_threshold_pct),
         block_threshold_pct: Number(form.block_threshold_pct),
@@ -268,11 +278,11 @@ function BudgetForm({ budget, onClose }: { budget?: Budget; onClose: () => void 
           )}
         </div>
         <div className="grid-2">
-          <Field label="Límite diario (USD)">
-            <input type="number" min={0} step="0.01" value={form.daily_limit_usd} onChange={set('daily_limit_usd')} />
+          <Field label="Límite diario (€)">
+            <input type="number" min={0} step="0.01" value={form.daily_limit_eur} onChange={set('daily_limit_eur')} />
           </Field>
-          <Field label="Límite mensual (USD)">
-            <input type="number" min={0} step="0.01" value={form.monthly_limit_usd} onChange={set('monthly_limit_usd')} />
+          <Field label="Límite mensual (€)">
+            <input type="number" min={0} step="0.01" value={form.monthly_limit_eur} onChange={set('monthly_limit_eur')} />
           </Field>
         </div>
         <div className="grid-3">
@@ -346,20 +356,20 @@ function Budgets() {
                   </td>
                   {perPerson(b) ? (
                     <>
-                      <td>{b.daily_limit_usd ? `${usd(b.daily_limit_usd)} por persona` : '—'}</td>
-                      <td>{b.monthly_limit_usd ? `${usd(b.monthly_limit_usd)} por persona` : '—'}</td>
+                      <td>{b.daily_limit_usd ? `${eur(b.daily_limit_usd)} por persona` : '—'}</td>
+                      <td>{b.monthly_limit_usd ? `${eur(b.monthly_limit_usd)} por persona` : '—'}</td>
                     </>
                   ) : (
                     <>
                       <td className="meter-cell">
                         <span className="row-sub">
-                          {usd(b.spent_today_usd)} {b.daily_limit_usd ? `de ${usd(b.daily_limit_usd)}` : ''}
+                          {eur(b.spent_today_usd)} {b.daily_limit_usd ? `de ${eur(b.daily_limit_usd)}` : ''}
                         </span>
                         <Meter value={Number(b.spent_today_usd)} max={b.daily_limit_usd ? Number(b.daily_limit_usd) : null} warnAt={b.alert_threshold_pct / 100} />
                       </td>
                       <td className="meter-cell">
                         <span className="row-sub">
-                          {usd(b.spent_month_usd)} {b.monthly_limit_usd ? `de ${usd(b.monthly_limit_usd)}` : ''}
+                          {eur(b.spent_month_usd)} {b.monthly_limit_usd ? `de ${eur(b.monthly_limit_usd)}` : ''}
                         </span>
                         <Meter value={Number(b.spent_month_usd)} max={b.monthly_limit_usd ? Number(b.monthly_limit_usd) : null} warnAt={b.alert_threshold_pct / 100} />
                       </td>
@@ -470,7 +480,7 @@ function Usage() {
       {summary.data && (
         <>
           <div className="stats">
-            <Stat label="Gasto" value={usd(summary.data.total_cost_usd)} />
+            <Stat label="Gasto" value={eur(summary.data.total_cost_usd)} />
             <Stat label="Llamadas" value={num(calls)} />
             <Stat label="Con error" value={calls ? pct(errors / calls, 1) : '—'} hint={`${errors} llamadas`} />
             <Stat label="Con modelo de reserva" value={num(fallbacks)} />
@@ -504,7 +514,7 @@ function Usage() {
                       <td className="num">{num(r.input_tokens)}</td>
                       <td className="num">{num(r.output_tokens)}</td>
                       <td className="num">{num(r.cache_read_tokens)}</td>
-                      <td className="num">{usd(r.cost_usd, true)}</td>
+                      <td className="num">{eur(r.cost_usd, true)}</td>
                       <td className="num">{r.errors ? <Badge tone="warning">{r.errors}</Badge> : 0}</td>
                       <td className="num">{r.avg_latency_ms !== null ? `${num(r.avg_latency_ms)} ms` : '—'}</td>
                     </tr>

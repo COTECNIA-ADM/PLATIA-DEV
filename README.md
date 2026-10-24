@@ -3,13 +3,15 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 6b, analítica y administración** (11 contenedores). En
+Estado actual: **fase 8, despliegue y operación** (11 contenedores en desarrollo; en
+producción se añaden Flower y, si usas Let's Encrypt, certbot). En
 http://localhost:8080 está la aplicación de operaciones (oportunidades, documentos,
 propuestas, copiloto, búsqueda, clientes, talento y avisos); en `/analytics/`, el cuadro de
 mando de negocio y el valor de la IA; y en `/admin/`, usuarios y roles, modelos y costes de
 IA, prompts, agentes, búsqueda, tareas y auditoría. Cada persona ve solo las aplicaciones y
 funciones que su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el
-copiloto (5c). El plan
+copiloto (5c). Para producción (HTTPS, despliegue desde GitHub con vuelta atrás, copias de
+seguridad y avisos por correo) sigue [docs/despliegue.md](docs/despliegue.md). El plan
 completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido
@@ -100,6 +102,8 @@ La primera vez que se construye `ai_service` descarga el modelo de embeddings (u
 | frontend | build `frontend/` | frontend | App React principal |
 | nginx | nginx:1.27 | frontend + backend | Proxy inverso, único puerto publicado |
 | migrations | build `backend/` | data | Un solo uso: migraciones Alembic y datos iniciales |
+| flower (producción) | imagen del backend | backend + data | Estado de las colas en `/flower/`, con contraseña |
+| certbot (producción, opcional) | certbot/certbot | frontend | Renueva el certificado de Let's Encrypt |
 
 ## Seguridad
 

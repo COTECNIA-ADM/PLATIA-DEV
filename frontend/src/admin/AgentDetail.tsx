@@ -10,7 +10,7 @@ import type { Page } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Spinner, Stat, errorMessage, useToast } from '../components/ui'
 import { SERVICE_TYPES } from '../analytics/AIValue'
 import { Tabs, pct, useTab } from './common'
-import { AGENT_STATUS, APPROVAL_LEVELS, usd } from './labels'
+import { AGENT_STATUS, APPROVAL_LEVELS, eur } from './labels'
 import { AGENT_TYPES, AgentStatus } from './Agents'
 import type { Agent, AgentMetrics, AgentRun, AgentTestResult, AgentTool, AgentVersion, ServiceConfig, ToolInfo } from './types'
 
@@ -406,7 +406,7 @@ function TestTab({ agent }: { agent: Agent }) {
               ))}
             </ol>
             <p className="field-hint">
-              {summary?.iterations ?? '?'} vueltas · {usd(summary?.cost_usd, true)} · ejecución <code>{run.data.run_id}</code>
+              {summary?.iterations ?? '?'} vueltas · {eur(summary?.cost_usd, true)} · ejecución <code>{run.data.run_id}</code>
             </p>
           </>
         )}
@@ -459,7 +459,7 @@ function Metrics({ agent }: { agent: Agent }) {
             <Stat label="Conversaciones" value={m.runs} />
             <Stat label="Terminadas bien" value={pct(m.completion_rate)} />
             <Stat label="Con error" value={pct(m.error_rate)} />
-            <Stat label="Coste medio" value={usd(m.avg_cost_usd, true)} />
+            <Stat label="Coste medio" value={eur(m.avg_cost_usd, true)} />
             <Stat label="Duración (p95)" value={m.p95_duration_ms !== null ? metricValue('p95_duration_ms', m.p95_duration_ms) : '—'} />
             <Stat label="Aprobaciones rechazadas" value={pct(m.approval_rejection_rate)} />
           </div>
@@ -523,7 +523,7 @@ function Metrics({ agent }: { agent: Agent }) {
                     </td>
                     <td className="num">{r.iterations}</td>
                     <td>{r.tool_calls.map((c) => TOOL_NAMES[c.name] ?? c.name).join(', ') || '—'}</td>
-                    <td className="num">{usd(r.cost_usd, true)}</td>
+                    <td className="num">{eur(r.cost_usd, true)}</td>
                     <td className="num">{r.duration_ms !== null && r.duration_ms >= 0 ? `${(r.duration_ms / 1000).toFixed(1)} s` : '—'}</td>
                   </tr>
                 ))}

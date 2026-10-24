@@ -1,4 +1,4 @@
-"""Comandos de línea de órdenes: ``flask seed`` y ``flask create-admin``."""
+"""Comandos de línea de órdenes: seed, create-admin, reset-mfa y reindex."""
 import click
 from flask import Flask
 
@@ -57,3 +57,23 @@ def register_cli(app: Flask) -> None:
         revoke_user_sessions(user.id, "mfa_reset")
         audit(AuditAction.MFA_DISABLED, "CRITICAL", user_id=user.id, details={"via": "cli"})
         click.echo(f"MFA desactivado para {user.email}. Pídele que lo active de nuevo.")
+
+    @app.cli.command("reindex")
+    def reindex_command() -> None:
+        """Reconstruye los índices de búsqueda (Meilisearch) y de documentos (Qdrant) desde
+        MySQL. Se usa tras restaurar una copia de seguridad: los índices no se copian
+        porque se pueden regenerar. El trabajo lo hacen los workers en segundo plano."""
+        from .extensions import db
+        from .models import Document
+        from .queue import PRIORITY_MAINTENANCE, enqueue
+        from .search.indexes import SPECS
+        from .tasks.ai import index_document
+        from .tasks.search import rebuild_index
+
+        for name in SPECS:
+            enqueue(rebuild_index, name, priority=PRIORITY_MAINTENANCE)
+        ids = db.session.scalars(db.select(Document.id).where(
+            Document.is_active.is_(True), Document.extracted_text.is_not(None))).all()
+        for doc_id in ids:
+            enqueue(index_document, doc_id, priority=PRIORITY_MAINTENANCE)
+        click.echo(f"En cola: {len(SPECS)} índices de búsqueda y {len(ids)} documentos para el RAG.")

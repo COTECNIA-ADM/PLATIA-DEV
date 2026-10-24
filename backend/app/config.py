@@ -84,6 +84,7 @@ class Config:
         _business_settings(self)
         _ai_settings(self)
         _search_settings(self)
+        _email_settings(self)
 
 
 def _business_settings(cfg, env=None) -> None:
@@ -178,6 +179,30 @@ def _search_settings(cfg, env=None) -> None:
     cfg.INTENT_LLM_ENABLED = _flag("INTENT_LLM_ENABLED", "true")
 
 
+DEFAULT_AI_DISCLOSURE = "Documento elaborado con ayuda de inteligencia artificial y revisado por el equipo."
+
+
+def _email_settings(cfg, env=None) -> None:
+    """Correo de avisos (Capítulo 22). Sin SMTP_HOST no se envía nada."""
+    env = os.environ if env is None else env
+    cfg.SMTP_HOST = env.get("SMTP_HOST", "").strip()
+    cfg.SMTP_PORT = int(env.get("SMTP_PORT", "587"))
+    cfg.SMTP_USER = env.get("SMTP_USER", "")
+    cfg.SMTP_PASSWORD = env.get("SMTP_PASSWORD", "")
+    # starttls (587), ssl (465) o none (solo para un servidor de pruebas local)
+    cfg.SMTP_SECURITY = env.get("SMTP_SECURITY", "starttls").strip().lower()
+    cfg.SMTP_TIMEOUT = float(env.get("SMTP_TIMEOUT", "10"))
+    cfg.EMAIL_FROM = env.get("EMAIL_FROM", "").strip()
+    cfg.EMAIL_FROM_NAME = env.get("EMAIL_FROM_NAME", "PLATIA")
+    # Enlace de los correos: https://<SERVER_NAME>
+    server = env.get("SERVER_NAME", "").strip()
+    cfg.PUBLIC_BASE_URL = env.get("PUBLIC_BASE_URL", f"https://{server}" if server else "").rstrip("/")
+    cfg.EMAIL_PRIORITIES = tuple(p.strip() for p in env.get("EMAIL_PRIORITIES", "high,urgent").split(",") if p.strip())
+    cfg.EMAIL_MAX_AGE_HOURS = int(env.get("EMAIL_MAX_AGE_HOURS", "24"))
+    # Aviso visible en los documentos generados con IA (vacío = solo en los metadatos)
+    cfg.AI_DISCLOSURE_TEXT = env.get("AI_DISCLOSURE_TEXT", DEFAULT_AI_DISCLOSURE)
+
+
 def _security_settings(cfg, env=None) -> None:
     """Seguridad e IAM (Capítulo 6, ADR-009). Valores por defecto del libro."""
     env = os.environ if env is None else env
@@ -253,6 +278,7 @@ class TestConfig:
         })
         _search_settings(self, {"MEILI_URL": "http://meilisearch:7700", "MEILI_MASTER_KEY": "test-key",
                                 "SEARCH_SEMANTIC_RERANK": "true", "RATE_LIMIT_SEARCH": "500"})
+        _email_settings(self, {})
         # Las tareas se ejecutan en línea, sin broker
         self.CELERY_BROKER_URL = "memory://"
         self.CELERY_ALWAYS_EAGER = True

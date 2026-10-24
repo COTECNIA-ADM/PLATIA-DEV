@@ -5,6 +5,7 @@ pymysql~=1.1
 cryptography>=42
 redis~=5.2
 celery[redis]~=5.5
+flower~=2.0             # panel de colas en producción (fase 8)
 gunicorn~=23.0
 requests~=2.32
 structlog~=25.1

@@ -2134,3 +2134,17 @@ p.notice {
   max-width: 100%;
   overflow-x: auto;
 }
+
+/* Marca del contenido generado con IA (fase 8) */
+.ai-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.ai-note span {
+  color: var(--purple);
+}
+.composer + .ai-note {
+  text-align: center;
+  margin: 4px 0 0;
+}

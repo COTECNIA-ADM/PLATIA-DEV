@@ -1,0 +1,115 @@
+# Producción (Capítulo 21). Se usa SIEMPRE junto al compose base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
+#
+# Diferencias con desarrollo:
+# - Imágenes ya construidas por GitHub Actions (versión en PLATIA_VERSION), sin compilar en el servidor.
+# - HTTPS en 443 (80 solo redirige y atiende el reto de Let's Encrypt). Cookies solo por HTTPS.
+# - Flower para vigilar las colas, detrás de nginx con usuario y contraseña.
+# - Logs en JSON con rotación: ningún contenedor llena el disco.
+# El despliegue lo hace scripts/deploy.sh (guía en docs/despliegue.md).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-backend-image: &backend-image ${REGISTRY:-ghcr.io/cotecnia-adm/platia-dev}/backend:${PLATIA_VERSION:-latest}
+
+x-prod-env: &prod-env
+  COOKIE_SECURE: "true"
+  LOG_FORMAT: json
+
+services:
+  mysql:
+    logging: *logging
+  redis:
+    logging: *logging
+  qdrant:
+    logging: *logging
+  meilisearch:
+    logging: *logging
+
+  migrations:
+    image: *backend-image
+    environment: *prod-env
+    logging: *logging
+  backend:
+    image: *backend-image
+    environment: *prod-env
+    logging: *logging
+  celery_default:
+    image: *backend-image
+    environment: *prod-env
+    logging: *logging
+  celery_ai:
+    image: *backend-image
+    environment: *prod-env
+    logging: *logging
+  celery_beat:
+    image: *backend-image
+    environment: *prod-env
+    logging: *logging
+
+  ai_service:
+    image: ${REGISTRY:-ghcr.io/cotecnia-adm/platia-dev}/ai_service:${PLATIA_VERSION:-latest}
+    logging: *logging
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io/cotecnia-adm/platia-dev}/frontend:${PLATIA_VERSION:-latest}
+    logging: *logging
+
+  # Estado de las colas de Celery (Capítulo 22). Solo se llega a través de nginx.
+  flower:
+    # Desde la imagen del backend y con su misma configuración (extends): así Flower
+    # entiende las colas, prioridades y claves de Redis igual que los workers.
+    # Sin persistencia: el histórico de tareas vive en la base de datos (FailedTask, auditoría).
+    extends:
+      file: docker-compose.yml
+      service: celery_beat
+    image: *backend-image
+    command: ["celery", "-A", "celery_app", "flower", "--port=5555", "--url_prefix=flower",
+              "--max_tasks=10000", "--purge_offline_workers=300"]
+    environment: *prod-env
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *logging
+    networks: !override [backend_net, data_net]
+
+  nginx:
+    # 80 y 443 fijos: Let's Encrypt valida por el 80 y el 80 redirige a HTTPS
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?Pon SERVER_NAME en .env (el dominio de la plataforma)}
+    volumes: !override
+      - ./nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ${CERTS_DIR:-./certs}:/etc/nginx/certs:ro
+      - ./nginx/auth:/etc/nginx/auth:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - ./nginx/reload-certs.sh:/docker-entrypoint.d/99-reload-certs.sh:ro
+    depends_on: [backend, frontend, flower]
+    logging: *logging
+
+  # Renovación de certificados de Let's Encrypt (opcional: perfil "letsencrypt").
+  # Si usas los certificados de tu empresa, no lo actives. Guía en docs/despliegue.md.
+  certbot:
+    image: certbot/certbot:v3.1.0
+    profiles: [letsencrypt]
+    entrypoint: ["sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet --deploy-hook 'cp -L /etc/letsencrypt/live/$$SERVER_NAME/*.pem /certs/'; sleep 12h & wait $${!}; done"]
+    environment:
+      SERVER_NAME: ${SERVER_NAME}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+      - ${CERTS_DIR:-./certs}:/certs
+    restart: unless-stopped
+    logging: *logging
+    networks: [frontend_net]
+
+volumes:
+  certbot_webroot:
+  letsencrypt:

@@ -3,6 +3,10 @@
 Se generan sin plantillas externas para que funcionen en cualquier instalación:
 estilos sobrios y el contenido tal como lo dejó la persona (lo editado a mano
 manda sobre lo que escribió la IA).
+
+Marcado del contenido generado con IA (fase 8): todos los ficheros llevan en sus
+metadatos que se han elaborado con IA y, salvo que AI_DISCLOSURE_TEXT esté vacío,
+un aviso visible en el pie (PDF y DOCX) o en la portada (PPTX).
 """
 import io
 from xml.sax.saxutils import escape
@@ -15,9 +19,39 @@ from pptx.util import Pt as PptPt
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
+from flask import current_app
 from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..models import Proposal
+
+
+GENERATOR = "PLATIA"
+AI_METADATA = "Contenido generado con ayuda de inteligencia artificial (PLATIA) y revisado por personas."
+AI_KEYWORDS = "PLATIA; IA generativa; contenido asistido por IA"
+
+
+def disclosure() -> str:
+    """Aviso visible. Vacío = solo en los metadatos."""
+    return (current_app.config.get("AI_DISCLOSURE_TEXT") or "").strip()
+
+
+def _mark_docx(doc, title: str) -> None:
+    props = doc.core_properties
+    props.title, props.author, props.last_modified_by = title[:250], GENERATOR, GENERATOR
+    props.comments, props.keywords, props.category = AI_METADATA, AI_KEYWORDS, "Generado con IA"
+    if disclosure():
+        for section in doc.sections:
+            footer = section.footer.paragraphs[0]
+            footer.text = disclosure()
+            for run in footer.runs:
+                run.font.size = Pt(8)
+                run.italic = True
+
+
+def _mark_pptx(prs, title: str) -> None:
+    props = prs.core_properties
+    props.title, props.author, props.last_modified_by = title[:250], GENERATOR, GENERATOR
+    props.comments, props.keywords, props.category = AI_METADATA, AI_KEYWORDS, "Generado con IA"
 
 
 def euros(value) -> str:
@@ -57,6 +91,7 @@ def proposal_docx(proposal: Proposal) -> bytes:
         doc.add_heading(title, level=1)
         for paragraph in paragraphs(text):
             doc.add_paragraph(paragraph)
+    _mark_docx(doc, proposal.title)
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
@@ -75,15 +110,32 @@ def _pdf_safe(text: str) -> str:
 
 
 def _pdf_doc(buffer, title: str) -> SimpleDocTemplate:
-    return SimpleDocTemplate(buffer, pagesize=A4, title=title, leftMargin=2.2 * cm, rightMargin=2.2 * cm,
-                             topMargin=2 * cm, bottomMargin=2 * cm)
+    return SimpleDocTemplate(buffer, pagesize=A4, title=title, author=GENERATOR, creator=GENERATOR,
+                             subject=AI_METADATA, keywords=AI_KEYWORDS,
+                             leftMargin=2.2 * cm, rightMargin=2.2 * cm, topMargin=2 * cm, bottomMargin=2 * cm)
 
 
-def _page_number(canvas, doc) -> None:
-    canvas.saveState()
-    canvas.setFont("Helvetica", 8)
-    canvas.drawRightString(A4[0] - 2.2 * cm, 1.2 * cm, f"{doc.page}")
-    canvas.restoreState()
+def _page_footer(text: str):
+    """Pie de cada página: aviso de IA a la izquierda y número a la derecha."""
+    safe = _pdf_safe(text).replace("<br/>", " ")
+    safe = safe.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")[:150]
+
+    def draw(canvas, doc) -> None:
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(A4[0] - 2.2 * cm, 1.2 * cm, f"{doc.page}")
+        if safe:
+            canvas.setFont("Helvetica-Oblique", 7)
+            canvas.setFillGray(0.4)
+            canvas.drawString(2.2 * cm, 1.2 * cm, safe)
+        canvas.restoreState()
+
+    return draw
+
+
+def _build_pdf(buffer, title: str, story: list) -> None:
+    footer = _page_footer(disclosure())
+    _pdf_doc(buffer, title).build(story, onFirstPage=footer, onLaterPages=footer)
 
 
 def _meta_table(meta: list[tuple[str, str]]) -> Table:
@@ -105,7 +157,7 @@ def proposal_pdf(proposal: Proposal) -> bytes:
         for paragraph in paragraphs(text) or ["—"]:
             story.append(Paragraph(_pdf_safe(paragraph), styles["BodyText"]))
             story.append(Spacer(1, 0.2 * cm))
-    _pdf_doc(buffer, proposal.title).build(story, onFirstPage=_page_number, onLaterPages=_page_number)
+    _build_pdf(buffer, proposal.title, story)
     return buffer.getvalue()
 
 
@@ -130,6 +182,11 @@ def proposal_pptx(proposal: Proposal, slides: list[dict]) -> bytes:
     cover.placeholders[1].text = " · ".join(filter(None, [
         opp.client.name if opp and opp.client else (opp.contracting_entity if opp else None),
         euros(proposal.total_amount_eur) if proposal.total_amount_eur is not None else None]))
+    if disclosure():
+        box = cover.shapes.add_textbox(Inches(0.5), Inches(6.8), Inches(12.3), Inches(0.4))
+        box.text_frame.text = disclosure()
+        box.text_frame.paragraphs[0].font.size = PptPt(11)
+        box.text_frame.paragraphs[0].font.italic = True
     for item in slides[:20]:
         slide = prs.slides.add_slide(prs.slide_layouts[1])
         slide.shapes.title.text = str(item.get("title") or "")[:120]
@@ -141,6 +198,7 @@ def proposal_pptx(proposal: Proposal, slides: list[dict]) -> bytes:
             paragraph.font.size = PptPt(20)
         if item.get("notes"):
             slide.notes_slide.notes_text_frame.text = str(item["notes"])[:2000]
+    _mark_pptx(prs, proposal.title)
     buffer = io.BytesIO()
     prs.save(buffer)
     return buffer.getvalue()
@@ -169,6 +227,7 @@ def cv_docx(cv: dict) -> bytes:
                 head.add_run(f"  ({exp['period']})")
             if exp.get("description"):
                 doc.add_paragraph(exp["description"])
+    _mark_docx(doc, f"CV · {cv['name']}")
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
@@ -195,5 +254,5 @@ def cv_pdf(cv: dict) -> bytes:
             if exp.get("description"):
                 story.append(Paragraph(_pdf_safe(exp["description"]), styles["BodyText"]))
             story.append(Spacer(1, 0.2 * cm))
-    _pdf_doc(buffer, cv["name"]).build(story, onFirstPage=_page_number, onLaterPages=_page_number)
+    _build_pdf(buffer, cv["name"], story)
     return buffer.getvalue()

@@ -9,7 +9,7 @@ import { Meter } from '../components/charts'
 import { SERVICE_TYPES } from '../analytics/AIValue'
 import { Badge, Spinner, Stat } from '../components/ui'
 import type { Budget, Compliance, FailedTask, UsageRow } from './types'
-import { BUDGET_SCOPE, COMPLIANCE_EVENTS, perPerson, usd } from './labels'
+import { BUDGET_SCOPE, COMPLIANCE_EVENTS, perPerson, eur } from './labels'
 
 export default function Overview() {
   const { can, user } = useAuth()
@@ -62,7 +62,7 @@ export default function Overview() {
         {can('llm_config', 'read') && (
           <Stat
             label="Gasto en IA (30 días)"
-            value={usage.data ? usd(usage.data.total_cost_usd) : '…'}
+            value={usage.data ? eur(usage.data.total_cost_usd) : '…'}
             hint={`${calls} llamadas, ${errors} con error`}
           />
         )}
@@ -99,11 +99,11 @@ export default function Overview() {
                       {!b.is_active && <Badge>inactivo</Badge>}
                     </span>
                     {perPerson(b) ? (
-                      <span className="muted">{b.daily_limit_usd ? `${usd(b.daily_limit_usd)} al día por persona` : 'por persona'}</span>
+                      <span className="muted">{b.daily_limit_usd ? `${eur(b.daily_limit_usd)} al día por persona` : 'por persona'}</span>
                     ) : (
                       <span className="muted">
-                        hoy {usd(b.spent_today_usd)}
-                        {b.daily_limit_usd && ` de ${usd(b.daily_limit_usd)}`}
+                        hoy {eur(b.spent_today_usd)}
+                        {b.daily_limit_usd && ` de ${eur(b.daily_limit_usd)}`}
                       </span>
                     )}
                   </div>
