@@ -404,6 +404,23 @@ def test_tailored_cv_only_uses_real_profile_data(client, manager, ai):
     assert "Nube SA" in text and "Experiencia inventada" not in text
 
 
+def test_tailored_cv_from_the_proposal_screen(client, manager, as_role, ai):
+    opp = _opp(client, manager, title="Servicio de datos")
+    proposal = client.post("/api/proposals", json={"opportunity_id": opp["id"]}, headers=manager).json
+    profile = CVProfile(full_name="Ana Datos", headline="Ingeniera de datos", family="data")
+    profile.skills = [CVSkill(name="Python", level=4)]
+    db.session.add(profile)
+    db.session.commit()
+    profile_id, url = profile.id, f"/api/proposals/{proposal['id']}/cv"
+    assert client.post(url, json={"profile_id": 999999}, headers=manager).status_code == 404
+    other = as_role("analyst", email="cv-ajena@example.com")
+    assert client.post(url, json={"profile_id": profile_id}, headers=other).status_code == 403  # no es suya
+    resp = client.post(url, json={"profile_id": profile_id}, headers=manager)
+    assert resp.status_code == 202 and resp.json["status"] == "queued"
+    atts = db.session.scalars(db.select(ProposalAttachment).filter_by(kind="cv")).all()
+    assert len(atts) == 2
+
+
 def test_package_has_pdf_and_pptx_from_the_deck(seeded, as_role, client, ai):
     from pptx import Presentation
 

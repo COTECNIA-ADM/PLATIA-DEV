@@ -3,12 +3,12 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 5c, copiloto** (11 contenedores): sobre el núcleo de IA (fase
-5a) y el buscador con asistente (fase 5b), un copiloto que responde mientras escribe,
-consulta la plataforma con herramientas y prepara trabajo (análisis, propuestas, CV a
-medida, paquete en PDF y PowerPoint) **pidiendo permiso antes de cambiar nada**. Recuerda
-tus preferencias, que puedes ver y borrar, y los administradores configuran y prueban
-los agentes en el Agent Studio. El plan
+Estado actual: **fase 6a, aplicación de operaciones** (11 contenedores). En
+http://localhost:8080 ya está la aplicación con la que se trabaja a diario: panel de inicio,
+oportunidades con filtros y relevancia, documentos con subida por arrastre y preguntas a la
+IA, propuestas con redacción, revisión y paquete final, el copiloto con streaming y
+aprobación, búsqueda con asistente, clientes, talento y avisos. Cada persona ve solo lo que
+su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el copiloto (5c). El plan
 completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido

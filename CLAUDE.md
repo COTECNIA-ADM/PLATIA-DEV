@@ -76,6 +76,14 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Campos que escriben las tareas en segundo plano (indexado, IA): `obj.set_system_fields(...)`,
   que no cambia `row_version`.
 
+## Frontal (`frontend/`, ADR-014)
+- Llamadas a la API solo con `src/lib/api.ts` (`api`, `download`, `stream`); datos con React Query.
+- El token de acceso vive en memoria: nunca `localStorage` ni `sessionStorage`.
+- Permisos con `useAuth()` (`can`, `hasAI`, `canModify`), que salen de `/api/auth/me`.
+- Nada de `dangerouslySetInnerHTML`: texto de la IA con `<Markdown>` y resaltado con `<Highlight>`.
+- Rutas con los mismos nombres que la API; filtros de listados en la URL.
+- Estilos en `src/styles.css` con las variables de `:root`; textos de la interfaz en español.
+
 ## Lo que NO hacer
 - No hardcodear IDs de tenant, API keys, contraseñas ni secretos.
 - No subir `.env` ni pegar secretos en issues, PRs o chats.

@@ -298,6 +298,10 @@ class GenerateProposalIn(Schema):
     instructions: Annotated[str, StringConstraints(max_length=2000)] | None = None
 
 
+class TailorCVIn(Schema):
+    profile_id: int = Field(ge=1)
+
+
 class PromptPublishIn(Schema):
     name: PromptName
     system_prompt: PromptText
