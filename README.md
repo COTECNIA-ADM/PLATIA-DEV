@@ -3,10 +3,12 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 5a, núcleo de IA** (10 contenedores): sobre el backend de negocio
-de la fase 4, preguntas con citas sobre los documentos (RAG), análisis GO/NO-GO, redacción
-de propuestas con Claude, puntuación semántica de oportunidades y gobierno de la IA
-(modelos por tarea, prompts versionados, costes, presupuestos, ROI y RGPD). El plan
+Estado actual: **fase 5b, búsqueda e intención** (11 contenedores): sobre el núcleo de IA
+de la fase 5a (RAG con citas, análisis GO/NO-GO, redacción de propuestas, gobierno de la
+IA), un buscador rápido con Meilisearch (filtros, facetas, búsqueda mientras se escribe)
+y un asistente que entiende frases como "licitaciones de ciberseguridad de más de
+100.000 euros que cierran este mes" y decide si buscar, responder con los documentos o
+proponer un análisis o una propuesta. El plan
 completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
 
 ## Arranque rápido

@@ -11,6 +11,17 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # Meilisearch real para los tests de integración del buscador (test_search_meili.py)
+    services:
+      meilisearch:
+        image: getmeili/meilisearch:v1.54.3
+        env:
+          MEILI_MASTER_KEY: ci-meili-master-key-0123456789
+          MEILI_NO_ANALYTICS: "true"
+        ports: ["7700:7700"]
+    env:
+      MEILI_TEST_URL: http://localhost:7700
+      MEILI_TEST_KEY: ci-meili-master-key-0123456789
     defaults:
       run:
         working-directory: backend

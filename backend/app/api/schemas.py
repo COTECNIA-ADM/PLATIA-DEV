@@ -357,3 +357,111 @@ class BaselineIn(Schema):
     task_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
     human_time_minutes: float = Field(gt=0, le=10000)
     human_hourly_cost_eur: Annotated[Decimal, Field(ge=0, max_digits=8, decimal_places=2)] = Decimal("65")
+
+
+# ---------------------------------------------------------------- Búsqueda e intención (fase 5b)
+SearchText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+ShortList = Annotated[list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]],
+                      Field(max_length=30)]
+INTENTS = ("CHAT_RAG", "AGENT_TOOLS", "WORKFLOW", "OFF_TOPIC")
+
+
+class OpportunitySearchIn(Schema):
+    q: SearchText = ""
+    status: ShortList | None = None
+    phase: list[Literal["F1", "F2", "F3", "F4", "F5"]] | None = Field(default=None, max_length=5)
+    sector: ShortList | None = None
+    service_line: ShortList | None = None
+    source: ShortList | None = None
+    cpv: list[Annotated[str, StringConstraints(pattern=r"^\d{2,8}$")]] | None = Field(default=None, max_length=20)
+    value_min: float | None = Field(default=None, ge=0)
+    value_max: float | None = Field(default=None, ge=0)
+    deadline_from: datetime | None = None
+    deadline_to: datetime | None = None
+    deadline_within_days: int | None = Field(default=None, ge=0, le=3650)
+    published_from: datetime | None = None
+    published_to: datetime | None = None
+    published_within_days: int | None = Field(default=None, ge=0, le=3650)
+    min_relevance: float | None = Field(default=None, ge=0, le=10)
+    owner: Literal["me"] | int | None = None
+    client_id: int | None = None
+    only_open: bool = False
+    sort: Literal["relevance", "-relevance_score", "deadline", "-published", "-value", "value", "-created"] = "relevance"
+    page: int = Field(default=1, ge=1, le=500)
+    per_page: int = Field(default=20, ge=1, le=100)
+    facets: bool = True
+    semantic: bool = False  # reordena la primera página por significado (Capítulo 13, consultas híbridas)
+
+    @model_validator(mode="after")
+    def _ranges(self):
+        if self.value_min is not None and self.value_max is not None and self.value_min > self.value_max:
+            raise ValueError("value_min no puede ser mayor que value_max")
+        return self
+
+    @field_validator("status")
+    @classmethod
+    def _known_status(cls, value):
+        unknown = [s for s in value or [] if s not in Opportunity.STATUSES]
+        if unknown:
+            raise ValueError(f"Estado no válido: {unknown[0]}")
+        return value
+
+
+class DocumentSearchIn(Schema):
+    q: SearchText = ""
+    doc_types: ShortList | None = None
+    include_old_versions: bool = False
+    page: int = Field(default=1, ge=1, le=500)
+    per_page: int = Field(default=20, ge=1, le=100)
+    facets: bool = True
+
+
+class SearchClickIn(Schema):
+    query_log_id: int = Field(ge=1)
+    kind: Literal["opportunity", "document", "client"]
+    object_id: int = Field(ge=1)
+    position: int = Field(ge=1, le=1000)
+
+
+class AssistantQueryIn(Schema):
+    # Límite del clasificador (Capítulo 13): 500 caracteres
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    history: list[ChatTurn] = Field(default_factory=list, max_length=10)
+    document_ids: list[int] | None = Field(default=None, max_length=50)
+    opportunity_id: int | None = Field(default=None, ge=1)  # contexto: la oportunidad que se está viendo
+
+
+class AssistantFeedbackIn(Schema):
+    query_log_id: int = Field(ge=1)
+    rating: int | None = Field(default=None, ge=1, le=5)
+    expected_intent: Literal[INTENTS] | None = None  # "esto no era lo que pedía"
+
+
+PatternText = Annotated[str, StringConstraints(min_length=2, max_length=300)]
+IntentSubtype = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z_]{0,50}$")]
+
+
+class IntentPatternIn(Schema):
+    intent: Literal[INTENTS]
+    subtype: IntentSubtype = ""
+    pattern: PatternText
+    priority: int = Field(default=100, ge=0, le=1000)
+    description: Annotated[str, StringConstraints(max_length=255)] | None = None
+
+
+class IntentPatternPatch(Schema):
+    intent: Literal[INTENTS] | None = None
+    subtype: IntentSubtype | None = None
+    pattern: PatternText | None = None
+    priority: int | None = Field(default=None, ge=0, le=1000)
+    description: Annotated[str, StringConstraints(max_length=255)] | None = None
+    is_active: bool | None = None
+
+
+class IntentTestIn(Schema):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    use_llm: bool = True
+
+
+class ReindexIn(Schema):
+    index: Literal["opportunities", "documents", "clients"] | None = None

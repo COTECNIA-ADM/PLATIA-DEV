@@ -1,8 +1,8 @@
 """Health checks (Apéndice B, blueprint `health`).
 
 - /api/health       comprobación rápida: base de datos y Redis.
-- /api/health/full  comprobación completa: los 3 esquemas, Redis, Qdrant, el servicio de IA
-                    y los workers de Celery.
+- /api/health/full  comprobación completa: los 3 esquemas, Redis, Qdrant, Meilisearch, el
+                    servicio de IA y los workers de Celery.
 
 /api/health es público (lo usan Docker y Nginx). /api/health/full exige sesión y
 el permiso health.read (rol de administración), porque describe la infraestructura.
@@ -61,6 +61,22 @@ def _check_qdrant() -> None:
         timeout=current_app.config["HEALTH_TIMEOUT_SECONDS"],
     )
     resp.raise_for_status()
+
+
+def _check_meilisearch() -> str | None:
+    """Meilisearch caído no tumba la plataforma: las búsquedas pasan a MySQL, así
+    que se informa como degradado, no como caído."""
+    from ..search.client import MeiliError, get_search_client
+
+    if not current_app.config.get("SEARCH_ENABLED", True):
+        return "Búsqueda desactivada (SEARCH_ENABLED=false)"
+    try:
+        status = get_search_client().health().get("status")
+    except MeiliError:
+        return "Meilisearch no responde: las búsquedas usan MySQL, más lentas y sin facetas"
+    if status != "available":
+        return f"Meilisearch en estado {status}"
+    return None
 
 
 def _check_ai_service() -> str | None:
@@ -124,6 +140,7 @@ def full():
             _check("database_analytics", _check_database("analytics")),
             _check("redis", _check_redis),
             _check("qdrant", _check_qdrant),
+            _check("meilisearch", _check_meilisearch),
             _check("ai_service", _check_ai_service),
             _check("workers", _check_workers),
         ]

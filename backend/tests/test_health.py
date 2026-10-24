@@ -49,6 +49,7 @@ def test_full_health_lists_every_core_service(client, admin_headers):
         "database_analytics",
         "redis",
         "qdrant",
+        "meilisearch",
         "ai_service",
         "workers",
     ]

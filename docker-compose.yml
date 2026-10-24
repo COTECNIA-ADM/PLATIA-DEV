@@ -1,4 +1,4 @@
-# Plataforma: 10 contenedores en 4 capas (más la tarea de migraciones).
+# Plataforma: 11 contenedores en 4 capas (más la tarea de migraciones).
 # Versión completa del libro: 17 servicios (Capítulo 4). Se ampliará por fases.
 #
 # Arranque:  python scripts/generate_env.py && docker compose up -d --build
@@ -57,6 +57,15 @@ x-backend-env: &backend-env
   SEMANTIC_SCORING: ${SEMANTIC_SCORING:-true}
   AI_SAMPLE_RETENTION_DAYS: ${AI_SAMPLE_RETENTION_DAYS:-30}
   AI_USD_EUR_RATE: ${AI_USD_EUR_RATE:-0.92}
+  # Búsqueda (fase 5b)
+  MEILI_URL: http://meilisearch:7700
+  MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+  SEARCH_ENABLED: ${SEARCH_ENABLED:-true}
+  RATE_LIMIT_SEARCH: ${RATE_LIMIT_SEARCH:-120}
+  SEARCH_SEMANTIC_RERANK: ${SEARCH_SEMANTIC_RERANK:-true}
+  INTENT_LAYER1_THRESHOLD: ${INTENT_LAYER1_THRESHOLD:-0.75}
+  INTENT_LLM_ENABLED: ${INTENT_LLM_ENABLED:-true}
+  SEARCH_LOG_RETENTION_DAYS: ${SEARCH_LOG_RETENTION_DAYS:-90}
 
 services:
   # ======================================================
@@ -107,6 +116,28 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     mem_limit: 2g
+    restart: unless-stopped
+    networks: [data_net]
+
+  # Búsqueda de texto (Capítulo 13). Un solo binario: sin cluster ni JVM.
+  # 512 MB de memoria de indexación, la cifra que usa el libro.
+  meilisearch:
+    image: getmeili/meilisearch:v1.54.3
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: 512Mb
+      MEILI_LOG_LEVEL: WARN
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 1g
     restart: unless-stopped
     networks: [data_net]
 
@@ -251,6 +282,7 @@ networks:
 
 volumes:
   documents_data:
+  meili_data:
   mysql_data:
   redis_data:
   qdrant_data:

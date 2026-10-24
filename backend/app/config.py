@@ -83,6 +83,7 @@ class Config:
         _security_settings(self)
         _business_settings(self)
         _ai_settings(self)
+        _search_settings(self)
 
 
 def _business_settings(cfg, env=None) -> None:
@@ -139,6 +140,33 @@ def _ai_settings(cfg, env=None) -> None:
     # Caracteres máximos que se envían al modelo por documento
     cfg.ANALYSIS_MAX_CHARS = int(env.get("ANALYSIS_MAX_CHARS", "150000"))
     cfg.ENRICH_MAX_CHARS = int(env.get("ENRICH_MAX_CHARS", "40000"))
+
+
+def _search_settings(cfg, env=None) -> None:
+    """Búsqueda con Meilisearch y clasificador de intención (Capítulo 13)."""
+    env = os.environ if env is None else env
+
+    def _flag(var: str, default: str) -> bool:
+        return env.get(var, default).strip().lower() in ("1", "true", "yes", "si", "sí")
+
+    cfg.SEARCH_ENABLED = _flag("SEARCH_ENABLED", "true")
+    cfg.MEILI_URL = env.get("MEILI_URL", "http://meilisearch:7700").rstrip("/")
+    cfg.MEILI_MASTER_KEY = env.get("MEILI_MASTER_KEY", "")
+    cfg.MEILI_INDEX_PREFIX = env.get("MEILI_INDEX_PREFIX", "platia_")
+    cfg.MEILI_TIMEOUT = float(env.get("MEILI_TIMEOUT", "5"))
+    cfg.MEILI_DOCUMENT_TEXT_CHARS = int(env.get("MEILI_DOCUMENT_TEXT_CHARS", "20000"))
+    cfg.SEARCH_SQL_FALLBACK = _flag("SEARCH_SQL_FALLBACK", "true")
+    cfg.SEARCH_SEMANTIC_RERANK = _flag("SEARCH_SEMANTIC_RERANK", "true")
+    cfg.SEARCH_ASSISTANT_SEMANTIC = _flag("SEARCH_ASSISTANT_SEMANTIC", "true")
+    cfg.SEARCH_RERANK_CANDIDATES = int(env.get("SEARCH_RERANK_CANDIDATES", "50"))
+    cfg.SEARCH_RERANK_WEIGHT = float(env.get("SEARCH_RERANK_WEIGHT", "0.5"))
+    cfg.SEARCH_LOG_RETENTION_DAYS = int(env.get("SEARCH_LOG_RETENTION_DAYS", "90"))
+    # Buscar mientras se escribe genera más peticiones que una pantalla normal
+    cfg.RATE_LIMIT_SEARCH = int(env.get("RATE_LIMIT_SEARCH", "120"))
+    # Clasificador de intención: umbral de la capa 1 y confianza mínima de la capa 2
+    cfg.INTENT_LAYER1_THRESHOLD = float(env.get("INTENT_LAYER1_THRESHOLD", "0.75"))
+    cfg.INTENT_MIN_CONFIDENCE = float(env.get("INTENT_MIN_CONFIDENCE", "0.5"))
+    cfg.INTENT_LLM_ENABLED = _flag("INTENT_LLM_ENABLED", "true")
 
 
 def _security_settings(cfg, env=None) -> None:
@@ -214,6 +242,8 @@ class TestConfig:
             "RAG_EVAL_SAMPLE_RATE": "0",
             "AI_MAX_THROTTLE_SECONDS": "0",
         })
+        _search_settings(self, {"MEILI_URL": "http://meilisearch:7700", "MEILI_MASTER_KEY": "test-key",
+                                "SEARCH_SEMANTIC_RERANK": "true", "RATE_LIMIT_SEARCH": "500"})
         # Las tareas se ejecutan en línea, sin broker
         self.CELERY_BROKER_URL = "memory://"
         self.CELERY_ALWAYS_EAGER = True

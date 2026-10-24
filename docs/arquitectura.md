@@ -15,7 +15,7 @@ diferentes. Las razones de cada elección están en [`adr/`](adr/).
 | P5 Perfiles | `qdrant` (CV vectorizados) + `ai_service` (puntuación) |
 | P6 Propuesta | `ai_service` (borrador) + `backend` (secciones, revisión, exportación) |
 | P7 Carga en portales | `celery_automation` + Selenium en `rpa_net` (más adelante) |
-| P8 Oportunidades | `celery_beat` + `meilisearch` (más adelante) |
+| P8 Oportunidades | `celery_beat` + `meilisearch` (fase 5b) |
 
 ## Capas y redes
 
@@ -85,6 +85,6 @@ mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service
 | Núcleo de 8 contenedores | Fase 0 (hecho) | Base mínima que permite crecer sin reescribir |
 | `celery_beat` | Fase 4 (hecho) | Tareas periódicas: limpieza RGPD, escaneo de datos personales, alertas |
 | Workers por cola (`celery_default`, `celery_ai`) | Fase 4 (hecho) | Las tareas de IA no deben competir con las de documentos |
-| `meilisearch` | Fase 4 | Búsqueda textual rápida de oportunidades y documentos |
+| `meilisearch` | Fase 5b | Búsqueda textual rápida de oportunidades y documentos |
 | `analytics_frontend`, `admin_frontend` | Fase 6 | Audiencias y despliegues distintos |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |

@@ -30,6 +30,7 @@ TASK_ROUTES = {
     "tasks.proposals.*": {"queue": "documents"},
     "tasks.ai.*": {"queue": "ai"},
     "tasks.sync.*": {"queue": "sync"},
+    "tasks.search.*": {"queue": "sync"},
     "tasks.crm.*": {"queue": "crm"},
     "tasks.automation.*": {"queue": "automation"},
     "tasks.alerts.*": {"queue": "priority"},
@@ -44,7 +45,7 @@ TASK_ANNOTATIONS = {
 }
 
 # Tareas programadas (Celery Beat). Las pesadas, de madrugada. Las que dependen
-# de Meilisearch o del CRM se añadirán en sus fases.
+# del CRM se añadirán en su fase.
 BEAT_SCHEDULE = {
     "scan-new-opportunities": {
         "task": "tasks.sync.scan_opportunities",
@@ -103,10 +104,23 @@ BEAT_SCHEDULE = {
         "task": "tasks.ai.cleanup_usage_samples",
         "schedule": crontab(minute=40, hour=3),
     },
+    # --- Búsqueda (fase 5b, Capítulo 13)
+    "search-sync-pending": {
+        "task": "tasks.search.sync_pending",
+        "schedule": 60.0,  # red de seguridad: cada cambio ya lanza su sincronización
+    },
+    "search-consistency-check": {
+        "task": "tasks.search.check_consistency",
+        "schedule": crontab(minute="*/10"),
+    },
+    "search-cleanup-query-log": {
+        "task": "tasks.search.cleanup_query_log",
+        "schedule": crontab(minute=50, hour=3),
+    },
 }
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
-                "app.tasks.system", "app.tasks.ai"]
+                "app.tasks.system", "app.tasks.ai", "app.tasks.search"]
 
 _flask_app: Flask | None = None
 
