@@ -1,12 +1,17 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { FAMILIES, SENIORITY, label } from '../lib/format'
 import type { Page, ProfileSummary } from '../lib/types'
 import { Badge, Empty, ErrorBox, Pager, Spinner, useDebounced } from '../components/ui'
+import ProfileForm from './ProfileForm'
 
 export default function Talent() {
+  const { can } = useAuth()
+  const navigate = useNavigate()
+  const [creating, setCreating] = useState(false)
   const [params, setParams] = useSearchParams()
   const [text, setText] = useState(params.get('q') ?? '')
   const [skillText, setSkillText] = useState(params.get('skill') ?? '')
@@ -41,6 +46,11 @@ export default function Talent() {
           <h1>Talento</h1>
           <p className="muted">Perfiles del equipo para preparar propuestas y CV a medida.</p>
         </div>
+        {can('talent', 'write') && (
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            Nuevo perfil
+          </button>
+        )}
       </header>
       <div className="toolbar">
         <input type="search" className="grow" placeholder="Nombre o titular" value={text} onChange={(e) => setText(e.target.value)} />
@@ -90,6 +100,7 @@ export default function Talent() {
         ))}
       </div>
       {data && <Pager pagination={data.pagination} onPage={(p) => update({ page: String(p) })} />}
+      {creating && <ProfileForm onClose={() => setCreating(false)} onSaved={(p) => navigate(`/talent/${p.id}`)} />}
     </div>
   )
 }
