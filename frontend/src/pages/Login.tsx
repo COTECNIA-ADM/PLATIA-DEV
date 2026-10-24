@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, getAppCode } from '../lib/api'
 import { APPS, type AppCode } from '../lib/apps'
 import { useAuth } from '../lib/auth'
+import BrandMark from '../components/BrandMark'
 import { errorMessage } from '../components/ui'
 
 type LoginResponse = { access_token?: string; mfa_required?: boolean; mfa_token?: string }
@@ -39,7 +40,7 @@ export default function Login() {
     <div className="login">
       <form className="login-card" onSubmit={(e) => void submit(e)}>
         <div className="brand brand-large">
-          <span className="brand-mark">P</span>
+          <BrandMark />
           <span>PLATIA</span>
         </div>
         <p className="muted">
