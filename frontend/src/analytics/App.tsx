@@ -6,11 +6,17 @@ import Shell, { type NavItem } from '../components/Shell'
 
 const Dashboard = lazy(() => import('./Dashboard'))
 const AIValue = lazy(() => import('./AIValue'))
+const Market = lazy(() => import('./Market'))
+const Competitors = lazy(() => import('./Competitors'))
+const Targets = lazy(() => import('./Targets'))
 const Account = lazy(() => import('../pages/Account'))
 const Health = lazy(() => import('../pages/Health'))
 
 const NAV: NavItem[] = [
   { to: '/', label: 'Cuadro de mando', icon: '▦', module: 'dashboards' },
+  { to: '/market', label: 'Mapa de oportunidad', icon: '◩', module: 'dashboards' },
+  { to: '/competitors', label: 'Competidores', icon: '◎', module: 'competitors' },
+  { to: '/targets', label: 'Objetivos', icon: '◆', module: 'dashboards' },
   { to: '/ai', label: 'Valor de la IA', icon: '✦', module: 'dashboards' },
 ]
 
@@ -20,6 +26,9 @@ export default function App() {
       <Routes>
         <Route element={<Shell nav={NAV} />}>
           <Route index element={<Dashboard />} />
+          <Route path="market" element={<Market />} />
+          <Route path="competitors" element={<Competitors />} />
+          <Route path="targets" element={<Targets />} />
           <Route path="ai" element={<AIValue />} />
           <Route path="account" element={<Account />} />
           <Route path="status" element={<Health />} />

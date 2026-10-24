@@ -2148,3 +2148,133 @@ p.notice {
   text-align: center;
   margin: 4px 0 0;
 }
+
+/* ---------------------------------------------------------------- Inteligencia comercial (fase 9a) */
+.heat-selectable {
+  cursor: pointer;
+}
+.heat-selected {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+.delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.delta-up {
+  color: var(--success);
+}
+.delta-down {
+  color: var(--danger);
+}
+.delta-flat {
+  color: var(--text-3);
+}
+.progress {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--series-1);
+}
+.progress-done .progress-fill {
+  background: var(--success);
+}
+.targets-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.targets-list li {
+  display: grid;
+  gap: 4px;
+}
+.targets-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+.dims {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.dims > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 40%) 1fr 48px;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+.swot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.swot section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.swot h4 {
+  margin: 0 0 6px;
+}
+.swot ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.weights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.import-errors {
+  max-height: 260px;
+  overflow: auto;
+}
+.ask-box textarea {
+  width: 100%;
+}
+@media (max-width: 860px) {
+  .swot {
+    grid-template-columns: 1fr;
+  }
+}
+.small {
+  font-size: 0.85rem;
+}
+.btn-row .grow {
+  flex: 1;
+}
+.market-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.card .facts + p {
+  margin-top: 12px;
+}
+@media (max-width: 1500px) {
+  .market-grid {
+    grid-template-columns: 1fr;
+  }
+}
+fieldset.field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+fieldset.field legend {
+  padding: 0;
+  margin-bottom: 6px;
+}

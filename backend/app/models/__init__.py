@@ -1,6 +1,7 @@
 """Modelos de la plataforma, agrupados por esquema (bind)."""
 from . import analytics, core, operations  # noqa: F401  (registra todas las tablas)
-from .analytics import AnalyticsSnapshot, DashboardConfig, FunnelStage, HumanBaselineConfig, TaskCompletionLog
+from .analytics import (AnalyticsSnapshot, BusinessTarget, CompetitorProfile, DashboardConfig, FunnelStage,
+                        HeatmapConfig, HeatmapScore, HumanBaselineConfig, TaskCompletionLog)
 from .base import utcnow
 from .core import (
     App,

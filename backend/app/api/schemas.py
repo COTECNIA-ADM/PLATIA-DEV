@@ -571,3 +571,81 @@ class RolePermissionsIn(Schema):
     version: int = Field(ge=1)
     permissions: dict[Annotated[str, StringConstraints(max_length=50)],
                       list[Annotated[str, StringConstraints(max_length=50)]]] = Field(max_length=40)
+
+
+# ---------------------------------------------------------------- Inteligencia comercial (fase 9a)
+Weight = Annotated[int, Field(ge=0, le=100)]
+ListItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+CodeItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+Period = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
+TargetMetric = Literal["new_count", "new_eur", "won_count", "won_eur"]
+
+
+class HeatmapConfigIn(Versioned):
+    weight_demand: Weight
+    weight_traction: Weight
+    weight_economic: Weight
+    weight_right_to_win: Weight
+    lookback_months: int = Field(ge=3, le=36)
+
+    @model_validator(mode="after")
+    def _sum_100(self):
+        total = self.weight_demand + self.weight_traction + self.weight_economic + self.weight_right_to_win
+        if total != 100:
+            raise ValueError(f"Los pesos deben sumar 100 (ahora suman {total}).")
+        return self
+
+
+class CompetitorIn(Schema):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    competitor_type: Literal["direct", "indirect", "substitute"] = "direct"
+    website: OptStr255 = None
+    description: Annotated[str, StringConstraints(max_length=2000)] | None = None
+    strengths: list[ListItem] = Field(default_factory=list, max_length=20)
+    weaknesses: list[ListItem] = Field(default_factory=list, max_length=20)
+    opportunities: list[ListItem] = Field(default_factory=list, max_length=20)
+    threats: list[ListItem] = Field(default_factory=list, max_length=20)
+    service_lines: list[CodeItem] = Field(default_factory=list, max_length=20)
+    sectors: list[CodeItem] = Field(default_factory=list, max_length=20)
+    price_positioning: int = Field(default=0, ge=-1, le=1)
+
+    @field_validator("website")
+    @classmethod
+    def _http(cls, value):
+        if value and not value.lower().startswith(("http://", "https://")):
+            raise ValueError("La web debe empezar por http:// o https://")
+        return value
+
+
+class CompetitorPatch(Versioned):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    competitor_type: Literal["direct", "indirect", "substitute"] | None = None
+    website: OptStr255 = None
+    description: Annotated[str, StringConstraints(max_length=2000)] | None = None
+    strengths: list[ListItem] | None = Field(default=None, max_length=20)
+    weaknesses: list[ListItem] | None = Field(default=None, max_length=20)
+    opportunities: list[ListItem] | None = Field(default=None, max_length=20)
+    threats: list[ListItem] | None = Field(default=None, max_length=20)
+    service_lines: list[CodeItem] | None = Field(default=None, max_length=20)
+    sectors: list[CodeItem] | None = Field(default=None, max_length=20)
+    price_positioning: int | None = Field(default=None, ge=-1, le=1)
+
+    _http = field_validator("website")(CompetitorIn._http.__func__)
+
+
+class TargetIn(Schema):
+    metric: TargetMetric
+    period: Period
+    service_line: Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] = ""
+    target_value: Money
+
+
+class TargetPatch(Versioned):
+    target_value: Money
+
+
+class AnalyticsAskIn(Schema):
+    question: Question
+    months: int = Field(default=12, ge=1, le=36)
+    service_line: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+    sector: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None

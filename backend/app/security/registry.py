@@ -20,7 +20,8 @@ MODULES: dict[str, set[str]] = {
     "copilot": {"read", "write"},  # conversaciones y memoria propias (fase 5c)
     "reports": {"read", "generate"},
     # --- analytics
-    "dashboards": {"read", "write"},
+    "dashboards": {"read", "write"},  # también objetivos y pesos del mapa de oportunidad (fase 9a)
+    "competitors": {"read", "write", "delete"},  # perfiles de competidores con DAFO (fase 9a)
     # --- admin
     "users": {"read", "write"},
     "roles": {"read", "write"},
@@ -40,13 +41,13 @@ MODULES: dict[str, set[str]] = {
 APP_MODULES: dict[str, tuple[str, ...]] = {
     "operations": ("clients", "opportunities", "documents", "proposals", "templates", "portfolio", "talent",
                    "alerts", "notifications", "copilot", "reports"),
-    "analytics": ("dashboards", "reports", "copilot"),
+    "analytics": ("dashboards", "competitors", "reports", "copilot"),
     "admin": ("users", "roles", "llm_config", "prompts", "audit", "health", "tasks", "search", "agents"),
     "security": ("audit", "alerts", "guardrails"),
 }
 
 # Clave especial: lista de módulos de IA, no acciones (Capítulo 6)
-AI_MODULES = {"document_analyzer", "proposal_generator", "cv_analyzer", "copilot_chat"}
+AI_MODULES = {"document_analyzer", "proposal_generator", "cv_analyzer", "copilot_chat", "analytics_assistant"}
 
 
 class UnknownPermissionError(LookupError):

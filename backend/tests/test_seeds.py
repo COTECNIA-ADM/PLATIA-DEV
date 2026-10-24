@@ -7,9 +7,9 @@ from app.seeds import run_seeds
 
 def test_seeds_create_base_data(app):
     created = run_seeds()
-    assert created == {"apps": 4, "roles": 13, "llm_services": 13, "llm_pricing": 3,
-                       "service_lines": 6, "proposal_templates": 5, "prompts": 14, "budgets": 3,
-                       "human_baselines": 5, "intent_patterns": 18, "agents": 3}
+    assert created == {"apps": 4, "roles": 13, "llm_services": 14, "llm_pricing": 3,
+                       "service_lines": 6, "proposal_templates": 5, "prompts": 15, "budgets": 3,
+                       "human_baselines": 6, "intent_patterns": 18, "agents": 3}
     codes = {a.code for a in db.session.scalars(db.select(App))}
     assert codes == {"operations", "analytics", "admin", "security"}
     assert db.session.get(LLMServiceConfig, "proposal_generation").fallback_model
@@ -67,4 +67,4 @@ def test_seeded_services_point_to_seeded_prompts(app):
             assert active.version == 1 and active.content_hash
             # Las instrucciones estables no llevan variables (así se pueden cachear)
             assert prompts.variables_of(active.system_prompt) == set()
-    assert db.session.scalar(db.select(db.func.count()).select_from(Prompt)) == 14
+    assert db.session.scalar(db.select(db.func.count()).select_from(Prompt)) == 15

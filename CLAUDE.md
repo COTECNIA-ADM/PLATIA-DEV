@@ -83,6 +83,10 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Ficheros generados con IA: metadatos y aviso visible de `app/services/rendering.py`; en
   pantalla, `<AiNote>` junto a la respuesta de la IA.
 - Costes de IA: se guardan en USD y se muestran en euros (`fmtAiCost`, `AI_USD_EUR_RATE`).
+- Analítica (ADR-017): los cálculos (mapa de oportunidad, comparaciones, objetivos) van en
+  `app/services/analytics.py` y `market.py`, nunca en el frontal. Lo que no se puede
+  reconstruir hacia atrás (cartera abierta) sale de las fotos diarias de `analytics_snapshots`.
+  Las importaciones de Excel comprueban primero (`dry_run`) y aplican todo o nada.
 
 ## Frontal (`frontend/`, ADR-014 y ADR-015)
 - Tres aplicaciones en un solo build: operaciones (`src/`), analítica (`src/analytics/`) y

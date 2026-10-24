@@ -22,6 +22,7 @@ export const SERVICE_TYPES: Record<string, string> = {
   memory_extraction: 'Memoria del copiloto',
   cv_tailoring: 'CV a medida',
   proposal_deck: 'Presentación de la propuesta',
+  analytics_qa: 'Preguntas sobre los datos',
 }
 
 const COST: Series[] = [{ key: 'cost', label: 'Gasto (€)', color: 'var(--series-1)' }]

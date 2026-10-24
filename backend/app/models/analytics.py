@@ -1,7 +1,8 @@
 """Esquema analytics_db: datos derivados para inteligencia de negocio (Cap. 23).
 
-Las tablas de cuadros de mando se alimentan en la fase 9. El retorno de la
-inversión de la IA (Capítulo 11) se registra desde la fase 5.
+El retorno de la inversión de la IA (Capítulo 11) se registra desde la fase 5. La
+fase 9a añade el mapa de oportunidad (puntuación por sector y línea de servicio),
+las fotos diarias de la cartera, los competidores y los objetivos de negocio.
 """
 from datetime import date, datetime
 from decimal import Decimal
@@ -10,7 +11,7 @@ from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Index, Integer, Num
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..extensions import db
-from .base import AuditMixin, TimestampMixin, utcnow
+from .base import AuditMixin, BusinessMixin, TimestampMixin, VersionedMixin, utcnow
 
 BIND = "analytics"
 
@@ -95,3 +96,94 @@ class TaskCompletionLog(db.Model):
     user_rating: Mapped[int | None] = mapped_column(Integer)
     was_accepted: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+# ---------------------------------------------------------------- Mapa de oportunidad (fase 9a)
+class HeatmapConfig(AuditMixin, VersionedMixin, db.Model):
+    """Pesos de las cuatro dimensiones del mapa de oportunidad (suman 100).
+
+    Una sola fila activa. Se editan desde Analítica; cambiar los pesos recalcula
+    el mes en curso. Los meses anteriores conservan los pesos con que se calcularon."""
+
+    __bind_key__ = BIND
+    __tablename__ = "heatmap_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    weight_demand: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    weight_traction: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    weight_economic: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
+    weight_right_to_win: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
+    lookback_months: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+
+    def weights(self) -> dict[str, int]:
+        return {"demand": self.weight_demand, "traction": self.weight_traction,
+                "economic": self.weight_economic, "right_to_win": self.weight_right_to_win}
+
+
+class HeatmapScore(TimestampMixin, db.Model):
+    """Puntuación 0-100 de una celda sector x línea de servicio en un mes.
+
+    Guarda las subpuntuaciones y los datos de partida para poder explicar cada
+    cifra (de dónde sale el 72 de «Sanidad x Ciberseguridad»)."""
+
+    __bind_key__ = BIND
+    __tablename__ = "heatmap_scores"
+    __table_args__ = (UniqueConstraint("period", "sector", "service_line", name="uq_heatmap_cell"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)  # AAAA-MM
+    sector: Mapped[str] = mapped_column(String(100), nullable=False)
+    service_line: Mapped[str] = mapped_column(String(50), nullable=False)
+    total_score: Mapped[float] = mapped_column(Float, nullable=False)
+    score_demand: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    score_traction: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    score_economic: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    score_right_to_win: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    opportunities_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recent_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prior_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    won_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lost_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    avg_value_eur: Mapped[Decimal | None] = mapped_column(Numeric(16, 2))
+    pipeline_eur: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False, default=0)
+    weights: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+# ---------------------------------------------------------------- Competidores y objetivos (fase 9a)
+class CompetitorProfile(BusinessMixin, VersionedMixin, db.Model):
+    """Competidor con su DAFO. Se edita a mano o se importa desde Excel."""
+
+    __bind_key__ = BIND
+    __tablename__ = "competitor_profiles"
+
+    TYPES = ("direct", "indirect", "substitute")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    competitor_type: Mapped[str] = mapped_column(String(20), nullable=False, default="direct")
+    website: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(2000))
+    strengths: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    weaknesses: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    opportunities: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    threats: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    service_lines: Mapped[list] = mapped_column(JSON, nullable=False, default=list)  # códigos donde coincidimos
+    sectors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    price_positioning: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # -1, 0, 1
+
+
+class BusinessTarget(BusinessMixin, VersionedMixin, db.Model):
+    """Objetivo mensual de una métrica, para el total o para una línea de servicio."""
+
+    __bind_key__ = BIND
+    __tablename__ = "business_targets"
+    __table_args__ = (UniqueConstraint("metric", "period", "service_line", name="uq_target_metric_period_line"),)
+
+    METRICS = ("new_count", "new_eur", "won_count", "won_eur")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    metric: Mapped[str] = mapped_column(String(30), nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)  # AAAA-MM
+    service_line: Mapped[str] = mapped_column(String(50), nullable=False, default="")  # "" = total
+    target_value: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False)
