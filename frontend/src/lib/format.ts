@@ -42,6 +42,30 @@ export function fmtMoney(value: string | number | null | undefined): string {
   return Number.isFinite(n) ? moneyFmt.format(n) : '—'
 }
 
+// Costes de IA: se guardan en dólares (lo que cobra el proveedor) y se muestran en
+// euros al cambio de AI_USD_EUR_RATE, que llega con /api/auth/me.
+let usdEurRate = 0.92
+const aiCostFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 })
+const aiCostFine = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 4 })
+
+export function setUsdEurRate(rate: number | null | undefined): void {
+  if (rate && rate > 0) usdEurRate = rate
+}
+
+export function usdToEur(usd: number): number {
+  return usd * usdEurRate
+}
+
+export function eurToUsd(eur: number): number {
+  return eur / usdEurRate
+}
+
+/** Coste de IA guardado en USD, mostrado en euros. */
+export function fmtAiCost(usd: string | number | null | undefined, fine = false): string {
+  if (usd === null || usd === undefined || usd === '') return '—'
+  return (fine ? aiCostFine : aiCostFmt).format(usdToEur(Number(usd)))
+}
+
 export function fmtBytes(bytes: number | null | undefined): string {
   if (!bytes) return '—'
   if (bytes < 1024) return `${bytes} B`

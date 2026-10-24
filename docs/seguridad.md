@@ -57,7 +57,7 @@ comprueba que es tuyo o que tienes la acción `manage` (autorización por objeto
 | `POST /api/auth/mfa/verify` | Completa el login con el código TOTP o uno de respaldo |
 | `POST /api/auth/refresh` | Renueva el token de acceso con la cookie (y la rota) |
 | `POST /api/auth/logout` | Cierra la sesión |
-| `GET /api/auth/me` | Usuario, sus apps y los permisos en la app activa |
+| `GET /api/auth/me` | Usuario, sus apps, los permisos en la app activa y `settings` (moneda y cambio de los costes de IA) |
 | `POST /api/auth/password` | Cambia la contraseña y cierra todas las sesiones |
 | `POST /api/auth/mfa/setup` · `enable` · `disable` | Gestión del MFA |
 | `GET/POST /api/admin/users`, `PUT …/memberships/<app>`, `POST …/deactivate` | Usuarios (app admin) |

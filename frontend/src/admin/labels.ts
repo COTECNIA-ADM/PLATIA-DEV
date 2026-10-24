@@ -4,10 +4,14 @@ import type { Budget } from './types'
 const usdFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 const usdFine = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
 
+/** Precios del proveedor: en dólares, como los publica. */
 export function usd(value: string | number | null | undefined, fine = false): string {
   if (value === null || value === undefined || value === '') return '—'
   return (fine ? usdFine : usdFmt).format(Number(value))
 }
+
+/** Gasto y límites de IA: se guardan en USD y se muestran en euros. */
+export { fmtAiCost as eur } from '../lib/format'
 
 export const BUDGET_SCOPE: Record<Budget['scope'], string> = {
   global: 'Toda la plataforma',

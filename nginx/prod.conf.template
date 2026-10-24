@@ -1,0 +1,60 @@
+# Proxy inverso en producción (Capítulo 21): HTTPS obligatorio.
+# La imagen oficial de nginx sustituye ${SERVER_NAME} al arrancar (envsubst) y deja intactas
+# las variables propias de nginx como $host.
+#
+# Certificados en /etc/nginx/certs: fullchain.pem y privkey.pem (los de tu empresa o los de
+# Let's Encrypt; ver docs/despliegue.md).
+
+server_tokens off;
+client_max_body_size 100m;
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+# HTTP: solo el reto de Let's Encrypt; todo lo demás se redirige a HTTPS
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:TLS:10m;
+    ssl_session_tickets off;
+
+    set $backend_upstream http://backend:5000;
+    set $frontend_upstream http://frontend:80;
+    set $flower_upstream http://flower:5555;
+    set $hsts "max-age=31536000; includeSubDomains";
+
+    include /etc/nginx/snippets/locations.conf;
+
+    # Flower (estado de las colas de Celery, Capítulo 22): solo con usuario y contraseña.
+    # El fichero se crea con htpasswd (docs/despliegue.md); mientras no exista, /flower/ no abre.
+    location /flower/ {
+        auth_basic "Flower";
+        auth_basic_user_file /etc/nginx/auth/flower.htpasswd;
+        add_header Strict-Transport-Security $hsts always;
+
+        proxy_pass $flower_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}

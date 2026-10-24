@@ -48,6 +48,10 @@ TASK_ANNOTATIONS = {
 # Tareas programadas (Celery Beat). Las pesadas, de madrugada. Las que dependen
 # del CRM se añadirán en su fase.
 BEAT_SCHEDULE = {
+    "send-notification-emails": {
+        "task": "tasks.notifications.send_pending_emails",
+        "schedule": crontab(minute="*/2"),
+    },
     "scan-new-opportunities": {
         "task": "tasks.sync.scan_opportunities",
         "schedule": crontab(minute=0, hour="*/12"),
@@ -126,7 +130,8 @@ BEAT_SCHEDULE = {
 }
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
-                "app.tasks.system", "app.tasks.ai", "app.tasks.search", "app.tasks.agents"]
+                "app.tasks.system", "app.tasks.ai", "app.tasks.search", "app.tasks.agents",
+                "app.tasks.notifications"]
 
 _flask_app: Flask | None = None
 

@@ -505,6 +505,7 @@ class Notification(BusinessMixin, db.Model):
     link: Mapped[str | None] = mapped_column(String(500))  # enlace profundo en el frontal
     extra_data: Mapped[dict | None] = mapped_column(JSON)
     read_at: Mapped[datetime | None] = mapped_column(DateTime)
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime)  # aviso enviado por correo
 
 
 # ---------------------------------------------------------------- Copiloto (Cap. 14)

@@ -12,6 +12,15 @@ import {
 import { ApiError } from '../lib/api'
 import type { Pagination } from '../lib/types'
 
+/** Marca del contenido generado con IA (fase 8): siempre visible junto a la respuesta. */
+export function AiNote({ children = 'Generado con IA · revísalo antes de usarlo' }: { children?: ReactNode }) {
+  return (
+    <p className="ai-note">
+      <span aria-hidden="true">✦</span> {children}
+    </p>
+  )
+}
+
 export function Spinner({ label = 'Cargando…' }: { label?: string }) {
   return (
     <div className="spinner" role="status">

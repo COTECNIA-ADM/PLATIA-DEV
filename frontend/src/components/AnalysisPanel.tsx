@@ -5,7 +5,7 @@ import { api, ApiError } from '../lib/api'
 import { MEETS, SEVERITY, fmtDateTime, label } from '../lib/format'
 import type { Analysis } from '../lib/types'
 import { Verdict } from './status'
-import { Badge, ErrorBox, ScoreBar, Spinner, errorMessage, useToast } from './ui'
+import { AiNote, Badge, ErrorBox, ScoreBar, Spinner, errorMessage, useToast } from './ui'
 
 const SCORE_LABELS: Record<string, string> = {
   technical_capability: 'Capacidad técnica',
@@ -43,6 +43,7 @@ export function AnalysisResult({ analysis }: { analysis: Analysis }) {
           {analysis.model} · {fmtDateTime(analysis.completed_at)}
         </span>
       </div>
+      <AiNote>Análisis generado con IA · la decisión es tuya</AiNote>
       {r.summary && <p className="lead">{r.summary}</p>}
       {analysis.truncated && (
         <p className="notice notice-warning">El documento era muy largo y se analizó una parte. Revisa el original.</p>

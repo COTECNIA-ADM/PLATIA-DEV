@@ -25,6 +25,9 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
 - Primer administrador: `docker compose run --rm migrations flask create-admin --email ... --name ...`
 - Variables nuevas tras un `git pull`: `python scripts/generate_env.py --actualizar`
+- Producción (guía en `docs/despliegue.md`): `docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`;
+  desplegar con `scripts/deploy.sh sha-xxxxxxx`, copias con `scripts/backup.sh --prod` y `scripts/restore.sh`
+- Reconstruir búsqueda y RAG desde MySQL: `flask reindex`
 
 ## Convenciones obligatorias
 - Logs con `structlog`, nunca `print()`.
@@ -75,6 +78,11 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   registros (Flask cierra la sesión de BD antes de enviar el cuerpo).
 - Campos que escriben las tareas en segundo plano (indexado, IA): `obj.set_system_fields(...)`,
   que no cambia `row_version`.
+- Migraciones compatibles hacia atrás (ADR-016): primero se añade; lo que se deja de usar se
+  borra en una versión posterior, para que la vuelta atrás automática funcione.
+- Ficheros generados con IA: metadatos y aviso visible de `app/services/rendering.py`; en
+  pantalla, `<AiNote>` junto a la respuesta de la IA.
+- Costes de IA: se guardan en USD y se muestran en euros (`fmtAiCost`, `AI_USD_EUR_RATE`).
 
 ## Frontal (`frontend/`, ADR-014 y ADR-015)
 - Tres aplicaciones en un solo build: operaciones (`src/`), analítica (`src/analytics/`) y

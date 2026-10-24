@@ -21,3 +21,9 @@ dist/
 .idea/
 .DS_Store
 *.tsbuildinfo
+
+# Producción: certificados, contraseñas de Flower, copias de seguridad y estado del despliegue
+certs/*.pem
+nginx/auth/*.htpasswd
+backups/
+.deploy/

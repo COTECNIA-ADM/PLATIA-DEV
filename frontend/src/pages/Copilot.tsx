@@ -8,7 +8,7 @@ import { MEMORY_CATEGORIES, TOOL_NAMES, fmtRelative, label } from '../lib/format
 import type { ChatMessage, Conversation, Memory, Page, PendingAction, Source, ToolUse } from '../lib/types'
 import { Sources } from '../components/AskDocuments'
 import { Markdown } from '../components/text'
-import { Badge, Empty, ErrorBox, Field, Modal, Spinner, errorMessage, useToast } from '../components/ui'
+import { AiNote, Badge, Empty, ErrorBox, Field, Modal, Spinner, errorMessage, useToast } from '../components/ui'
 
 type Live = {
   text: string
@@ -464,6 +464,7 @@ function Chat({ conversationId }: { conversationId: number }) {
           </button>
         )}
       </form>
+      <AiNote>El copiloto es una IA y puede equivocarse · revisa lo importante</AiNote>
     </div>
   )
 }

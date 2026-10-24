@@ -89,4 +89,13 @@ pedir aprobación antes de cambiar nada (ADR-013).
 | Workers por cola (`celery_default`, `celery_ai`) | Fase 4 (hecho) | Las tareas de IA no deben competir con las de documentos |
 | `meilisearch` | Fase 5b (hecho) | Búsqueda textual rápida de oportunidades y documentos |
 | ~~`analytics_frontend`, `admin_frontend`~~ | Fase 6 | Finalmente son dos entradas más del contenedor `frontend` (ADR-015) |
+| `flower`, `certbot` (solo producción) | Fase 8 (hecho) | Estado de las colas tras nginx con contraseña; renovación de Let's Encrypt (ADR-016) |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |
+
+## Producción
+
+`docker-compose.prod.yml` se aplica encima de `docker-compose.yml`: imágenes de GHCR por
+commit, nginx en 80/443 con HTTPS y HSTS, registros JSON rotados y Flower en `/flower/`.
+Los despliegues los lanza GitHub Actions con aprobación y vuelven solos a la versión
+anterior si la nueva no arranca sana. Guía en [despliegue.md](despliegue.md) y decisión en
+[ADR-016](adr/ADR-016-despliegue-y-operacion.md).

@@ -6,7 +6,7 @@ import { useMutation } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import type { RagAnswer, Source } from '../lib/types'
 import { Markdown } from './text'
-import { Badge, errorMessage } from './ui'
+import { AiNote, Badge, errorMessage } from './ui'
 
 export function Sources({ sources, focus }: { sources: Source[]; focus?: number | null }) {
   if (!sources.length) return null
@@ -48,6 +48,7 @@ export function RagView({ answer }: { answer: RagAnswer }) {
         <p className="notice notice-warning">Los documentos no bastan para responder del todo. Revisa las fuentes.</p>
       )}
       <Markdown text={answer.answer} onCite={cite} />
+      <AiNote />
       <Sources sources={answer.sources} focus={focus} />
       {answer.usage_log_id && (
         <div className="rating">
