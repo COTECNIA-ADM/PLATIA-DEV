@@ -24,6 +24,7 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Migraciones: las aplica el contenedor `migrations` al levantar; guía en `docs/migraciones.md`
 - Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
 - Primer administrador: `docker compose run --rm migrations flask create-admin --email ... --name ...`
+- Contraseña olvidada: `flask reset-password --email ...`; MFA perdido: `flask reset-mfa --email ...`
 - Variables nuevas tras un `git pull`: `python scripts/generate_env.py --actualizar`
 - Producción (guía en `docs/despliegue.md`): `docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`;
   desplegar con `scripts/deploy.sh sha-xxxxxxx`, copias con `scripts/backup.sh --prod` y `scripts/restore.sh`
@@ -45,6 +46,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   sin registrar hace fallar el arranque.
 - Blueprints por dominio en `app/routes/` y lógica de negocio en `app/services/`.
   Entrada validada con un esquema Pydantic de `app/api/schemas.py` (`extra="forbid"`).
+- Toda ruta nueva se añade a la tabla de `docs/api.md`: `tests/test_api_docs.py` falla si
+  falta una ruta o si la tabla documenta una que no existe.
 - Contrato de API común (guía en `docs/api.md`): listados con `items` + `pagination`, fechas
   ISO UTC, errores con excepciones de `app/errors.py` (nunca detalles internos en un 500).
 - Recursos compartidos con bloqueo optimista: el modelo usa `VersionedMixin` y el `PATCH`

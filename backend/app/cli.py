@@ -58,6 +58,35 @@ def register_cli(app: Flask) -> None:
         audit(AuditAction.MFA_DISABLED, "CRITICAL", user_id=user.id, details={"via": "cli"})
         click.echo(f"MFA desactivado para {user.email}. Pídele que lo active de nuevo.")
 
+    @app.cli.command("reset-password")
+    @click.option("--email", required=True)
+    def reset_password_command(email: str) -> None:
+        """Pone una contraseña provisional a quien ha olvidado la suya (fase 9b).
+        Se teclea sin mostrarse; cierra sus sesiones y queda auditado como CRITICAL.
+        La persona debe cambiarla en «Mi cuenta» al entrar."""
+        from .extensions import db
+        from .models import AuditAction, User
+        from .security.audit import audit
+        from .security.passwords import WeakPasswordError, hash_password, validate_password_policy
+        from .security.sessions import revoke_user_sessions
+
+        user = db.session.scalar(db.select(User).filter_by(email=email.strip().lower()))
+        if user is None:
+            raise click.ClickException("No existe ese usuario.")
+        password = click.prompt("Contraseña provisional", hide_input=True,
+                                confirmation_prompt="Repite la contraseña")
+        try:
+            validate_password_policy(password)
+        except WeakPasswordError as exc:
+            raise click.ClickException(str(exc)) from exc
+        user.password_hash = hash_password(password)
+        user.failed_login_count, user.locked_until = 0, None  # y la desbloquea
+        db.session.commit()
+        revoke_user_sessions(user.id, "password_reset")
+        audit(AuditAction.PASSWORD_CHANGED, "CRITICAL", user_id=user.id, details={"via": "cli"})
+        click.echo(f"Contraseña provisional puesta a {user.email}. Dásela por un canal seguro "
+                   "y pídele que la cambie al entrar.")
+
     @app.cli.command("reindex")
     def reindex_command() -> None:
         """Reconstruye los índices de búsqueda (Meilisearch) y de documentos (Qdrant) desde

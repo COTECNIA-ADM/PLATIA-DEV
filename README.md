@@ -3,17 +3,30 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 9a, inteligencia comercial** (11 contenedores en desarrollo; en
-producción se añaden Flower y, si usas Let's Encrypt, certbot). En
-http://localhost:8080 está la aplicación de operaciones (oportunidades, documentos,
-propuestas, copiloto, búsqueda, clientes, talento y avisos); en `/analytics/`, el cuadro de
-mando de negocio (con comparación y objetivos), el mapa de oportunidad, los competidores,
-la importación desde Excel, las preguntas a la IA sobre los datos y el valor de la IA; y en `/admin/`, usuarios y roles, modelos y costes de
-IA, prompts, agentes, búsqueda, tareas y auditoría. Cada persona ve solo las aplicaciones y
-funciones que su rol permite. Debajo siguen el núcleo de IA (5a), la búsqueda (5b) y el
-copiloto (5c). Para producción (HTTPS, despliegue desde GitHub con vuelta atrás, copias de
-seguridad y avisos por correo) sigue [docs/despliegue.md](docs/despliegue.md). El plan
-completo está en [`docs/plan-fases.md`](docs/plan-fases.md).
+Estado actual: **fase 9b, documentación**. La plataforma está completa salvo la fase 7
+(batería de pruebas de calidad), que va después. Son 11 contenedores en desarrollo; en
+producción se añaden Flower y, si usas Let's Encrypt, certbot.
+
+- http://localhost:8080: operaciones (oportunidades, documentos, propuestas, copiloto,
+  búsqueda, clientes, talento y avisos).
+- `/analytics/`: cuadro de mando con comparación y objetivos, mapa de oportunidad,
+  competidores, importación desde Excel, preguntas a la IA sobre los datos y valor de la IA.
+- `/admin/`: usuarios y roles, modelos y costes de IA, prompts, agentes, búsqueda, tareas y
+  auditoría.
+
+Cada persona ve solo las aplicaciones y funciones que su rol permite.
+
+## Documentación
+
+| Para | Documento |
+| --- | --- |
+| Usar la plataforma | [Manual de usuario](docs/manual-usuario.md) |
+| Ponerla en producción | [Despliegue y operación](docs/despliegue.md) |
+| Resolver incidencias | [Guía de incidencias](docs/incidencias.md) |
+| Protección de datos | [Borrador de DPIA](docs/dpia.md) (lo revisa el DPD) |
+| Integrarse con la API | [API](docs/api.md) (comprobada contra el código en cada test) |
+| Entender el diseño | [Requisitos](docs/requisitos.md), [arquitectura](docs/arquitectura.md), [ADR](docs/adr/README.md), [seguridad](docs/seguridad.md), [migraciones](docs/migraciones.md) |
+| Saber qué falta | [Plan por fases](docs/plan-fases.md) |
 
 ## Arranque rápido
 

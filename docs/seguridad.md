@@ -76,3 +76,7 @@ Todo en `platform_core.audit_log` con IP, navegador y `request_id`.
 - **Sin códigos de respaldo:** quien administre el servidor ejecuta
   `docker compose run --rm migrations flask reset-mfa --email usuario@empresa.com`.
   Queda auditado como CRITICAL y cierra sus sesiones.
+- **Contraseña olvidada:** quien administre el servidor ejecuta
+  `docker compose run --rm migrations flask reset-password --email usuario@empresa.com`,
+  teclea una provisional (no se muestra) y se la da por un canal seguro. Desbloquea la
+  cuenta, cierra sus sesiones y queda auditado como CRITICAL.
