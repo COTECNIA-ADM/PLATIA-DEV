@@ -3,8 +3,7 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 7b, pruebas del frontal**. La plataforma está completa; falta la
-fase 7c (pruebas de calidad de la IA). Son 11 contenedores en desarrollo; en
+Estado actual: **fase 7c, calidad de la IA**, la última del plan. Son 11 contenedores en desarrollo; en
 producción se añaden Flower y, si usas Let's Encrypt, certbot.
 
 - http://localhost:8080: operaciones (oportunidades, documentos, propuestas, copiloto,

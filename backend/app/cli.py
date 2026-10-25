@@ -1,4 +1,4 @@
-"""Comandos de línea de órdenes: seed, create-admin, reset-mfa y reindex."""
+"""Comandos de línea de órdenes: seed, create-admin, reset-mfa, reset-password, reindex y eval-ai."""
 import click
 from flask import Flask
 
@@ -86,6 +86,47 @@ def register_cli(app: Flask) -> None:
         audit(AuditAction.PASSWORD_CHANGED, "CRITICAL", user_id=user.id, details={"via": "cli"})
         click.echo(f"Contraseña provisional puesta a {user.email}. Dásela por un canal seguro "
                    "y pídele que la cambie al entrar.")
+
+    @app.cli.command("eval-ai")
+    @click.option("--suite", "suites", multiple=True,
+                  type=click.Choice(["prompts", "guardarrailes", "intencion", "rag"]),
+                  help="Suites a pasar (se puede repetir). Por defecto, todas.")
+    @click.option("--max-usd", default=0.5, show_default=True, type=click.FloatRange(min=0),
+                  help="Gasto máximo en IA de esta evaluación, en dólares.")
+    @click.option("--juez", is_flag=True, help="Puntúa además las respuestas del RAG con el modelo (rag.evaluate).")
+    @click.option("--salida", type=click.Path(dir_okay=False, writable=True),
+                  help="Guarda el informe completo en JSON en este fichero.")
+    def eval_ai_command(suites: tuple[str, ...], max_usd: float, juez: bool, salida: str | None) -> None:
+        """Evalúa la IA con el modelo real: intención, RAG e inyección (fase 7c).
+
+        Las suites prompts y guardarrailes no cuestan nada. Cada llamada queda en el
+        registro de uso con su coste. Sale con código 1 si algo queda bajo el umbral."""
+        import json
+
+        from .evals.runner import SUITES, evaluate
+
+        run = evaluate(suites or SUITES, max_usd=max_usd, judge=juez)
+        report = run.to_dict()
+        for name, suite in report["suites"].items():
+            mark = "OK " if suite.get("ok") else "MAL"
+            figures = {k: v for k, v in suite.items() if k in (
+                "aciertos", "inyecciones_resistidas", "juez_faithfulness", "juez_hallucination", "revisados", "error")}
+            click.echo(f"[{mark}] {name}: {figures}")
+            for problem in suite.get("problemas", []) + suite.get("fallos", []):
+                click.echo(f"      - {problem}")
+            for case in suite.get("casos", []):
+                if not case.get("ok"):
+                    detail = case.get("problemas") or f"{case.get('obtenido')} en vez de {case.get('esperado')}"
+                    click.echo(f"      - {case['id']}: {detail}")
+        if run.stopped:
+            click.echo(run.stopped)
+        click.echo(f"Coste: {report['coste_usd']:.4f} USD en {report['llamadas']} llamadas.")
+        if salida:
+            with open(salida, "w", encoding="utf-8") as fh:
+                json.dump(report, fh, ensure_ascii=False, indent=2)
+            click.echo(f"Informe completo en {salida}")
+        if not run.passed:
+            raise SystemExit(1)
 
     @app.cli.command("reindex")
     def reindex_command() -> None:

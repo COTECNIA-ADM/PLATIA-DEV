@@ -30,9 +30,15 @@ que solo falla detrás del proxy.
   lentas; encuentran lo que las otras no ven, como la configuración de Nginx.
 
 **La IA no cuesta dinero en la CI**
-- Ninguna prueba de la CI llama a Anthropic. Las de calidad de IA (fase 7c) usan
-  respuestas grabadas o simuladas; la ejecución con el modelo real es un script aparte que
-  se lanza a mano.
+- Ninguna prueba de la CI llama a Anthropic. Los juegos de casos de la fase 7c viven en
+  `backend/app/evals/data/` (JSON) y se usan dos veces: en la CI contra los guardarraíles,
+  los prompts y el servicio de IA simulado, y en `flask eval-ai`, que los pasa por el
+  modelo real a mano, con un tope de gasto y todo registrado en `llm_usage_log`.
+- Los ataques que los patrones no paran se dejan en el juego marcados como `gap`
+  (`xfail` estricto): quedan a la vista y, si un cambio los empieza a parar, la prueba
+  avisa para quitar la marca. Lo que no se puede parar con patrones se mide en el modelo.
+- Las mismas comprobaciones sin coste se pasan sobre la instalación (`--suite prompts`,
+  `--suite guardarrailes`): un prompt editado desde Admin puede perder sus defensas.
 
 ## Consecuencias
 - Una ruta, pantalla o regla nueva queda cubierta sin escribir nada si cumple las
