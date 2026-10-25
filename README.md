@@ -3,8 +3,8 @@
 Reproducción de la Plataforma descrita en *El Arquitecto y la Máquina*
 (Carlos Pérez González y Juan C. Montes, 2026), construida por fases con Claude Code.
 
-Estado actual: **fase 7a, pruebas de seguridad y backend**. La plataforma está completa;
-falta terminar la fase 7 (pruebas del frontal y de calidad de la IA). Son 11 contenedores en desarrollo; en
+Estado actual: **fase 7b, pruebas del frontal**. La plataforma está completa; falta la
+fase 7c (pruebas de calidad de la IA). Son 11 contenedores en desarrollo; en
 producción se añaden Flower y, si usas Let's Encrypt, certbot.
 
 - http://localhost:8080: operaciones (oportunidades, documentos, propuestas, copiloto,
@@ -26,6 +26,7 @@ Cada persona ve solo las aplicaciones y funciones que su rol permite.
 | Protección de datos | [Borrador de DPIA](docs/dpia.md) (lo revisa el DPD) |
 | Integrarse con la API | [API](docs/api.md) (comprobada contra el código en cada test) |
 | Entender el diseño | [Requisitos](docs/requisitos.md), [arquitectura](docs/arquitectura.md), [ADR](docs/adr/README.md), [seguridad](docs/seguridad.md), [migraciones](docs/migraciones.md) |
+| Lanzar las pruebas | [Pruebas](docs/pruebas.md) |
 | Saber qué falta | [Plan por fases](docs/plan-fases.md) |
 
 ## Arranque rápido
