@@ -2278,3 +2278,21 @@ fieldset.field legend {
   padding: 0;
   margin-bottom: 6px;
 }
+
+/* Formulario de perfiles de talento */
+.row-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.row-form .grow {
+  flex: 1;
+  min-width: 0;
+}
+.input-short {
+  width: 90px;
+}
+.card-flat {
+  box-shadow: none;
+  background: var(--surface-2);
+}
