@@ -49,6 +49,23 @@ El módulo y la acción tienen que estar en `backend/app/security/registry.py`; 
 backend no arranca. Para modificar un registro concreto, además, `ensure_can_modify()`
 comprueba que es tuyo o que tienes la acción `manage` (autorización por objeto).
 
+### La matriz de autorización lo comprueba sola
+
+`backend/tests/test_security_matrix.py` recorre **todas** las rutas de Flask (no una lista
+escrita a mano) y falla si una ruta nueva:
+
+- no lleva `@platform_guard`, `@require_permission` o `@rate_limit` (los decoradores dejan
+  una marca en la función que el test lee);
+- responde algo distinto de 401 sin token o con un token basura;
+- responde algo distinto de 403 a un rol sin permisos (denegación por defecto);
+- es de IA y responde a un rol con todos los permisos pero sin el módulo de IA.
+
+Las únicas excepciones están en el propio test, cada una con su motivo: las rutas públicas
+(entrar, MFA, refresco y salud básica) y las de la propia cuenta (`/me`, contraseña, MFA),
+que solo piden sesión. `test_security_tokens.py` prueba tokens manipulados (algoritmo
+`none`, otra clave, `sub` cambiado, caducado, de refresco, usuario dado de baja) y
+`test_security_objects.py` que no se llega a datos de otra persona cambiando ids en la URL.
+
 ## API de autenticación
 
 | Ruta | Qué hace |

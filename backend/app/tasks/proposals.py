@@ -65,7 +65,7 @@ def generate_package(self, proposal_id: int) -> dict:
         files = {"docx": rendering.proposal_docx(proposal), "pdf": rendering.proposal_pdf(proposal),
                  "pptx": rendering.proposal_pptx(proposal, slides)}
     except Exception as exc:  # noqa: BLE001
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     # Solo se conserva el paquete generado más reciente
     for old in proposal.attachments:
         if old.kind == "generated" and old.is_active:

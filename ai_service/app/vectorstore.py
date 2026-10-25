@@ -91,7 +91,7 @@ class VectorStore:
             return {"points": 0, "model": self.embedder.model}
         name = await self._ensure(logical, len(vectors[0]))
         points = []
-        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+        for i, (chunk, vector) in enumerate(zip(chunks, vectors, strict=False)):
             payload = {**common, "ref_id": ref_id, "chunk_index": i, "total_chunks": len(chunks),
                        "text": chunk["text"], **(chunk.get("metadata") or {})}
             points.append(models.PointStruct(id=self.point_id(logical, ref_id, i), vector=vector,

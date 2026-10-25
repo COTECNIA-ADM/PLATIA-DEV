@@ -83,7 +83,7 @@ MIN_CLOSED_FOR_WIN_RATE = 3
 
 def _normalize(text: str) -> str:
     text = text.lower()
-    for a, b in zip("áéíóúüñ", "aeiouun"):
+    for a, b in zip("áéíóúüñ", "aeiouun", strict=False):
         text = text.replace(a, b)
     return text
 
@@ -148,7 +148,7 @@ def semantic_scores(opp: Opportunity, lines: list[ServiceLine]) -> dict[str, flo
         return None
     low, high = cfg.get("SEMANTIC_SIM_LOW", 0.15), cfg.get("SEMANTIC_SIM_HIGH", 0.65)
     return {line.code: round(max(0.0, min(1.0, (sim - low) / (high - low))) * 10, 2)
-            for line, sim in zip(lines, sims)}
+            for line, sim in zip(lines, sims, strict=False)}
 
 
 def score_against(opp: Opportunity, line: ServiceLine, semantic: float | None = None) -> dict:

@@ -220,7 +220,7 @@ def _rerank(q: str, hits: list[dict], page: Page) -> tuple[list[dict], bool]:
         return hits, False
     low, high = current_app.config.get("SEMANTIC_SIM_LOW", 0.15), current_app.config.get("SEMANTIC_SIM_HIGH", 0.65)
     weight = current_app.config.get("SEARCH_RERANK_WEIGHT", 0.5)
-    for h, sim in zip(hits, sims):
+    for h, sim in zip(hits, sims, strict=False):
         semantic = max(0.0, min(1.0, (sim - low) / (high - low))) if high > low else sim
         h["_score"] = (1 - weight) * (h.get("_rankingScore") or 0) + weight * semantic
     return sorted(hits, key=lambda h: h["_score"], reverse=True), True
@@ -386,7 +386,7 @@ def quick_search(q: str, limit: int, *, viewer: Viewer, can_opportunities: bool,
         log.warning("search_unavailable", index="multi", error=str(exc))
         results, engine = [_sql_quick(kind, q, limit, viewer) for kind, _, _ in plan], "mysql"
     groups = []
-    for (kind, _, _), res in zip(plan, results):
+    for (kind, _, _), res in zip(plan, results, strict=False):
         groups.append({"type": kind, "total": res.get("estimatedTotalHits", len(res.get("hits", []))),
                        "items": _quick_items(kind, res.get("hits", []), viewer)})
     return {"query": q, "groups": groups, "engine": engine,

@@ -218,7 +218,7 @@ def _cached_vector(embedder, text: str) -> tuple[float, ...]:
 
 
 def _cosine(a, b) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = math.sqrt(sum(x * x for x in a)) or 1.0
     nb = math.sqrt(sum(y * y for y in b)) or 1.0
     return dot / (na * nb)

@@ -39,7 +39,7 @@ def sync_pending(self) -> dict:
         log.warning("search_sync_failed", error=str(exc))
         if self.request.retries >= self.max_retries:
             return {"failed": str(exc)}
-        raise self.retry_later(TransientError(str(exc)))
+        raise self.retry_later(TransientError(str(exc))) from exc
 
 
 @celery.task(name="tasks.search.rebuild_index", base=PlatformTask, bind=True, max_retries=2)
@@ -52,7 +52,7 @@ def rebuild_index(self, kind: str) -> dict:
     except TaskAlreadyRunning:
         return {"skipped": f"ya se está reconstruyendo {kind}"}
     except MeiliError as exc:
-        raise self.retry_later(TransientError(str(exc)))
+        raise self.retry_later(TransientError(str(exc))) from exc
 
 
 @celery.task(name="tasks.search.check_consistency", base=PlatformTask)

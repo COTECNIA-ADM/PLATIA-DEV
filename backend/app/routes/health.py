@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from ..extensions import db
 from ..security.context import platform_guard, require_permission
+from ..security.ratelimit import rate_limit
 
 health_bp = Blueprint("health", __name__, url_prefix="/api/health")
 log = structlog.get_logger()
@@ -132,6 +133,7 @@ def quick():
 @health_bp.get("/full")
 @platform_guard
 @require_permission("health", "read")
+@rate_limit("RATE_LIMIT_READ")
 def full():
     return _summary(
         [

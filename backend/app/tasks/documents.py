@@ -64,7 +64,7 @@ def process_upload(self, document_id: int) -> dict:
         if doc is not None and doc.processing_status == "processing":
             doc.processing_status = "pending"
             db.session.commit()
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
 
 
 @celery.task(name="tasks.documents.recover_pending", base=PlatformTask)

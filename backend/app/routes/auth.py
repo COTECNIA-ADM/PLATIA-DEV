@@ -166,6 +166,7 @@ def logout():
 
 @auth_bp.get("/me")
 @platform_guard
+@rate_limit("RATE_LIMIT_READ")
 def me():
     ctx = g.security
     return jsonify(
@@ -203,6 +204,7 @@ def change_password():
 
 @auth_bp.post("/mfa/setup")
 @platform_guard
+@rate_limit("RATE_LIMIT_LOGIN", period=60, scope="user")
 def mfa_setup():
     """Genera un secreto nuevo (aún no activo) y devuelve el URI para la app."""
     user: User = g.current_user

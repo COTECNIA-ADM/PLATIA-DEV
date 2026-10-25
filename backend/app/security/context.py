@@ -126,6 +126,7 @@ def platform_guard(fn):
         structlog.contextvars.bind_contextvars(user_id=user.id, app=app_code)
         return fn(*args, **kwargs)
 
+    wrapper.platform_guard = True  # lo revisa tests/test_security_matrix.py
     return wrapper
 
 
@@ -143,6 +144,7 @@ def require_permission(module: str, action: str):
                              app=ctx.app_code, permission=f"{module}.{action}")
             return fn(*args, **kwargs)
 
+        wrapper.required_permission = (module, action)
         return wrapper
 
     return decorator
@@ -165,6 +167,7 @@ def require_ai_module(name: str):
                              app=ctx.app_code, ai_module=name)
             return fn(*args, **kwargs)
 
+        wrapper.required_ai_module = name
         return wrapper
 
     return decorator

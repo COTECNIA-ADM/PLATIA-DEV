@@ -49,7 +49,7 @@ def index_document(self, document_id: int) -> dict:
         doc = db.session.get(Document, document_id)
         doc.set_system_fields(index_status="failed" if self.request.retries >= self.max_retries else "pending")
         db.session.commit()
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
 
 
 @celery.task(name="tasks.ai.enrich_document", base=PlatformTask, bind=True, max_retries=3)
@@ -69,7 +69,7 @@ def enrich_document(self, document_id: int) -> dict:
         return {"document_id": document_id, "status": "skipped", "reason": exc.error_type}
     except AIUnavailableError as exc:
         db.session.rollback()
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
 
 
 @celery.task(name="tasks.ai.sync_document_access", base=PlatformTask, bind=True, max_retries=8)
@@ -87,7 +87,7 @@ def sync_document_access(self, document_id: int) -> dict:
         db.session.commit()
     except AIServiceError as exc:
         db.session.rollback()
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     return {"document_id": document_id, "status": "synced"}
 
 
@@ -129,7 +129,7 @@ def analyze(self, analysis_id: int) -> dict:
             return {"analysis_id": analysis_id, "status": "failed"}
         analysis.status = "queued"
         db.session.commit()
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     if analysis.status == "done" and analysis.created_by:
         notify(analysis.created_by, "REPORT_READY", f"Análisis GO/NO-GO listo: {analysis.verdict}",
                (analysis.result or {}).get("summary", "")[:500],
@@ -161,7 +161,7 @@ def generate_proposal(self, proposal_id: int, user_id: int | None, keys: list[st
                                    generation_error=None if retry else exc.message[:500])
         db.session.commit()
         if retry:
-            raise self.retry_later(exc)
+            raise self.retry_later(exc) from exc
         if user_id:
             notify(user_id, "SYSTEM", "No se ha podido redactar la propuesta", exc.message[:500],
                    link=f"/proposals/{proposal_id}")
@@ -182,7 +182,7 @@ def index_opportunity(self, opportunity_id: int) -> dict:
     try:
         return {"opportunity_id": opportunity_id, **similar.index_opportunity(opp)}
     except AIServiceError as exc:
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
 
 
 # ------------------------------------------------------------------ Calidad
@@ -200,7 +200,7 @@ def evaluate_rag(self, usage_log_id: int, question: str, context: str, answer: s
     except FINAL_ERRORS as exc:
         return {"usage_log_id": usage_log_id, "status": "skipped", "reason": exc.error_type}
     except AIUnavailableError as exc:
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     data = result.data if isinstance(result.data, dict) else {}
     scores = {k: clamp(data.get(k)) for k in ("faithfulness", "relevance", "completeness", "hallucination")}
     present = [v for k, v in scores.items() if v is not None and k != "hallucination"]
@@ -263,7 +263,7 @@ def rag_consistency(self) -> dict:
     try:
         refs = get_ai_client().refs(rag.COLLECTION)
     except AIServiceError as exc:
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     docs = {d.id: d for d in db.session.scalars(db.select(Document).where(Document.index_status == "indexed"))}
     reindex = [d.id for d in docs.values() if d.is_active and refs.get(d.id, 0) != (d.vector_count or 0)]
     orphans = [ref for ref in refs if ref not in docs or not docs[ref].is_active]
@@ -313,7 +313,7 @@ def tailor_cv(self, proposal_id: int, profile_id: int, user_id: int | None) -> d
         result = cv_tailoring.tailor(proposal, profile, user_id)
     except AIUnavailableError as exc:
         if self.request.retries < self.max_retries:
-            raise self.retry_later(exc)
+            raise self.retry_later(exc) from exc
         result = None
         error = exc.message
     except FINAL_ERRORS as exc:

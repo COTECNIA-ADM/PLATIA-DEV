@@ -12,10 +12,12 @@
 | 5c | Copiloto | Agente con herramientas, chat con streaming (SSE), CV a medida, PDF y PPTX del paquete de propuesta | 14–15 | Hecha |
 | 6a | Frontend de operaciones | App principal: oportunidades, documentos, propuestas, copiloto, búsqueda, clientes, talento y avisos | 16–17 | Hecha |
 | 6b | Frontend de analytics y admin | Paneles de analítica y administración | 16–17 | Hecha |
-| 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
+| 7a | Seguridad y backend | Matriz de autorización de todas las rutas, objetos de otras personas, tokens manipulados, cobertura y revisión de estilo (ruff) en la CI | 18–19 | En revisión |
+| 7b | Pruebas del frontal | Pruebas de pantallas y recorrido completo en navegador (E2E) en la CI | 18 | Pendiente |
+| 7c | Calidad de IA | Juego de preguntas y ataques que corre en la CI sin coste, y script opcional con Claude real | 20 | Pendiente |
 | 8 | Despliegue y operación | CI/CD con imágenes en GHCR y despliegue aprobado con vuelta atrás, `docker-compose.prod.yml`, HTTPS, Flower, copias de seguridad, avisos por correo, marcado de contenido IA | 21–22, Ap. D | Hecha |
 | 9a | Inteligencia comercial | Mapa de oportunidad con pesos, comparación con el periodo anterior y fotos de cartera, objetivos, competidores con DAFO, importación desde Excel y «Pregunta a tus datos» | 23 | Hecha |
-| 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | En revisión |
+| 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | Hecha |
 
 ## Del núcleo mínimo a los 17 servicios del libro
 
