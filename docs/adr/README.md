@@ -23,3 +23,4 @@ Para proponer un cambio, se escribe un ADR nuevo que sustituya al anterior.
 | [015](ADR-015-analitica-y-administracion.md) | Analítica y administración como tres aplicaciones en un solo frontal, con historial de estados | Aceptado |
 | [016](ADR-016-despliegue-y-operacion.md) | Despliegue en un servidor con Docker Compose, imágenes en GHCR y vuelta atrás automática | Aceptado |
 | [017](ADR-017-inteligencia-comercial.md) | Inteligencia comercial: puntuaciones relativas en el backend, fotos diarias de cartera e importación síncrona | Aceptado |
+| [018](ADR-018-estrategia-de-pruebas.md) | Pruebas por capas que se comprueban contra el código, sin coste de IA en la CI | Aceptado |

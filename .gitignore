@@ -27,3 +27,7 @@ certs/*.pem
 nginx/auth/*.htpasswd
 backups/
 .deploy/
+
+# Pruebas de navegador (Playwright)
+frontend/test-results/
+frontend/playwright-report/

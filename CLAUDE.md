@@ -22,7 +22,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Tests IA: `cd ai_service && pip install -r requirements-dev.txt && pytest`
 - Estilo: `ruff check backend ai_service` (configuración en `ruff.toml`); la CI exige además
   una cobertura mínima (`--cov-fail-under`, ver `.github/workflows/ci.yml`)
-- Frontal: `cd frontend && npm ci && npm run build`
+- Frontal: `cd frontend && npm ci && npm test && npm run build`
+- E2E (plataforma levantada): `cd frontend && npx playwright test` con `E2E_EMAIL`/`E2E_PASSWORD`; guía en `docs/pruebas.md`
 - Migraciones: las aplica el contenedor `migrations` al levantar; guía en `docs/migraciones.md`
 - Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
 - Primer administrador: `docker compose run --rm migrations flask create-admin --email ... --name ...`
@@ -106,6 +107,9 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Nada de `dangerouslySetInnerHTML`: texto de la IA con `<Markdown>` y resaltado con `<Highlight>`.
 - Rutas con los mismos nombres que la API; filtros de listados en la URL.
 - Estilos en `src/styles.css` con las variables de `:root`; textos de la interfaz en español.
+- Pruebas (ADR-018): `*.test.tsx` junto al componente, con `mockApi` y `renderWithProviders`
+  de `src/test/utils.tsx`; se busca por rol y texto visible. `src/test/conventions.test.ts`
+  comprueba las reglas de arriba que se pueden leer en el código.
 
 ## Lo que NO hacer
 - No hardcodear IDs de tenant, API keys, contraseñas ni secretos.
