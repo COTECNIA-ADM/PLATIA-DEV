@@ -16,6 +16,6 @@ def test_local_model_captures_meaning(tmp_path):
         ["sanciones por retraso en la entrega", "penalizaciones por demora en los plazos",
          "suministro de material de oficina"])
     def cos(a, b):
-        return sum(x * y for x, y in zip(a, b))
+        return sum(x * y for x, y in zip(a, b, strict=False))
     assert emb.dims == 384 and emb.status == "ready"
     assert cos(query, related) > cos(query, unrelated) + 0.1

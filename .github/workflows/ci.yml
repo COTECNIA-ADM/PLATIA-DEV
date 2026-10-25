@@ -31,7 +31,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q
+      # Revisión de estilo con la configuración común de ruff.toml
+      - run: ruff check .
+      # Cobertura medida en cada PR; falla si baja del mínimo (89 % al cerrar la fase 7a)
+      - run: pytest -q --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=85
 
   ai_service:
     runs-on: ubuntu-latest
@@ -44,7 +47,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: pytest -q
+      - run: ruff check .
+      # 85 % al cerrar la fase 7a
+      - run: pytest -q --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=80
 
   frontend:
     runs-on: ubuntu-latest

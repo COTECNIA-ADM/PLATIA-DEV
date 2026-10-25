@@ -66,6 +66,7 @@ def rate_limit(limit: int | str = "RATE_LIMIT_DEFAULT", period: int = 60, scope:
                 return resp
             return fn(*args, **kwargs)
 
+        wrapper.rate_limit = limit
         return wrapper
 
     return decorator

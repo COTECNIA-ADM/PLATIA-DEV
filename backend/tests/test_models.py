@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import (
@@ -134,7 +135,7 @@ def test_document_versions_link_to_parent(app):
 
 def test_user_email_is_unique(app):
     db.session.add_all([User(email="a@example.com", full_name="A"), User(email="a@example.com", full_name="B")])
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         db.session.commit()
     db.session.rollback()
 

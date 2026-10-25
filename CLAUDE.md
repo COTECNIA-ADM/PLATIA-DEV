@@ -20,6 +20,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Levantar: `docker compose up -d --build` → http://localhost:8080
 - Tests backend: `cd backend && pip install -r requirements-dev.txt && pytest`
 - Tests IA: `cd ai_service && pip install -r requirements-dev.txt && pytest`
+- Estilo: `ruff check backend ai_service` (configuración en `ruff.toml`); la CI exige además
+  una cobertura mínima (`--cov-fail-under`, ver `.github/workflows/ci.yml`)
 - Frontal: `cd frontend && npm ci && npm run build`
 - Migraciones: las aplica el contenedor `migrations` al levantar; guía en `docs/migraciones.md`
 - Nueva migración: `flask db migrate -m "..."`, revisarla a mano y probar upgrade/downgrade/upgrade
@@ -42,6 +44,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Todo endpoint nuevo lleva `@platform_guard`, `@require_permission(módulo, acción)` y
   `@rate_limit(<tipo>)` (guía en `docs/seguridad.md`). Permisos siempre desde la BD, nunca del JWT;
   default-deny.
+- `tests/test_security_matrix.py` recorre todas las rutas: una ruta sin esos decoradores, o
+  que no dé 401/403 cuando toca, hace fallar los tests. Una excepción nueva va allí con su motivo.
 - Los permisos nuevos se registran en `backend/app/security/registry.py`: un módulo o acción
   sin registrar hace fallar el arranque.
 - Blueprints por dominio en `app/routes/` y lógica de negocio en `app/services/`.

@@ -137,7 +137,7 @@ def scan_opportunities(self) -> dict:
     except TaskAlreadyRunning:
         return {"status": "already_running"}
     except TransientError as exc:
-        raise self.retry_later(exc)
+        raise self.retry_later(exc) from exc
     log.info("feeds_scanned", results=results)
     return results
 

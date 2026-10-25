@@ -1,0 +1,13 @@
+# Revisión de estilo (fase 7a). La CI la pasa en backend/ y ai_service/.
+# Errores de sintaxis (E9), fallos de Pyflakes (F) y errores probables de bugbear (B).
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = ["E9", "F", "B"]
+
+[lint.per-file-ignores]
+# Reexporta los modelos para `from app.models import ...`
+"backend/app/models/__init__.py" = ["F401"]
+# FastAPI declara las dependencias como valor por defecto (Depends, Header, File...)
+"ai_service/**" = ["B008"]
