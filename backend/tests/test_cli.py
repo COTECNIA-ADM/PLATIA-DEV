@@ -25,3 +25,20 @@ def test_reset_mfa_is_audited(seeded, make_user):
     db.session.refresh(user)
     assert user.mfa_enabled is False
     assert db.session.scalar(db.select(AuditLog).filter_by(action="MFA_DISABLED")).severity == "CRITICAL"
+
+
+def test_reset_password_asks_and_is_audited(seeded, make_user):
+    from app.security.passwords import verify_password
+
+    user = make_user()
+    runner = seeded.test_cli_runner()
+    new = "Provisional-Segura-456"
+    assert runner.invoke(args=["reset-password", "--email", "nadie@example.com"], input=f"{new}\n{new}\n").exit_code != 0
+    assert runner.invoke(args=["reset-password", "--email", user.email], input="corta\ncorta\n").exit_code != 0
+    result = runner.invoke(args=["reset-password", "--email", user.email], input=f"{new}\n{new}\n")
+    assert result.exit_code == 0, result.output
+    assert new not in result.output
+    db.session.refresh(user)
+    assert verify_password(new, user.password_hash)
+    entry = db.session.scalar(db.select(AuditLog).filter_by(action="PASSWORD_CHANGED"))
+    assert entry.severity == "CRITICAL"

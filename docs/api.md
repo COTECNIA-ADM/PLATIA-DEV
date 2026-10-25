@@ -1,4 +1,4 @@
-# API de negocio (fases 4 y 5a)
+# API de la plataforma
 
 Todas las rutas cuelgan de `http://localhost:8080/api` y exigen sesión
 (`Authorization: Bearer <token>`). La aplicación activa va en `X-App-Code`
@@ -23,9 +23,15 @@ no responde y el plan B en MySQL está desactivado. Los errores de IA añaden lo
 
 ## Recursos
 
+Esta tabla la comprueba `backend/tests/test_api_docs.py`: toda ruta de Flask tiene que
+estar aquí y todo lo que está aquí tiene que existir. Notación: `GET/POST /ruta` (varios
+métodos), `[/{id}]` (tramo opcional) y rutas sin el prefijo `/api`.
+
 | Módulo | Rutas principales | Permiso |
 | --- | --- | --- |
-| Clientes | `GET/POST /clients`, `GET/PATCH/DELETE /clients/{id}`, `POST/PATCH/DELETE /clients/{id}/contacts[/{cid}]`, `.../projects[/{pid}]` | `clients` |
+| Sesión | `POST /auth/login` (`email`, `password`; con MFA devuelve `mfa_token`), `POST /auth/mfa/verify` (`mfa_token`, `code`), `POST /auth/refresh` (cookie de refresco), `POST /auth/logout`, `GET /auth/me` (persona, aplicaciones, permisos y ajustes), `POST /auth/password` (`current_password`, `new_password`), `POST /auth/mfa/setup`, `POST /auth/mfa/enable` (`code`), `POST /auth/mfa/disable` (`password`, `code`). Detalle en [seguridad.md](seguridad.md) | Sesión iniciada (salvo `login`, `mfa/verify` y `refresh`) |
+| Salud | `GET /health` (base de datos y Redis; sin sesión, para el balanceador), `GET /health/full` (todos los servicios) | — / `health.read` |
+| Clientes | `GET/POST /clients`, `GET/PATCH/DELETE /clients/{id}`, `POST/PATCH/DELETE /clients/{id}/contacts[/{cid}]`, `POST/PATCH/DELETE /clients/{id}/projects[/{pid}]` | `clients` |
 | Oportunidades | `GET/POST /opportunities` (filtros `status`, `phase=F1..F5`, `owner=me`, `client_id`, `service_line`, `min_score`, `deadline_from/to`, `q`, `sort`), `GET/PATCH/DELETE /opportunities/{id}`, `POST /opportunities/{id}/status`, `POST /opportunities/{id}/score`, `POST/DELETE /opportunities/{id}/documents[/{doc}]`, `GET /opportunities/export` | `opportunities` |
 | Documentos | `GET/POST /documents` (multipart: `file`, `title`, `doc_type`), `GET/PATCH/DELETE /documents/{id}`, `GET /documents/{id}/status`, `GET /documents/{id}/download`, `POST /documents/{id}/versions`, `POST /documents/{id}/reprocess` | `documents` |
 | Propuestas | `GET/POST /proposals`, `GET/PATCH/DELETE /proposals/{id}`, `POST /proposals/{id}/status`, `POST /proposals/{id}/reviews`, `POST /proposals/{id}/package`, `POST/PATCH/DELETE /proposals/{id}/sections[/{sid}]`, `POST /proposals/{id}/attachments` (multipart: `file`, `kind`), `GET/DELETE /proposals/{id}/attachments/{aid}` | `proposals` |
@@ -38,7 +44,7 @@ no responde y el plan B en MySQL está desactivado. Los errores de IA añaden lo
 | IA en documentos | `POST/GET /documents/{id}/analysis` (GO/NO-GO), `POST /documents/{id}/reindex`; `PATCH /documents/{id}` admite `allowed_roles` | `documents` |
 | IA en oportunidades | `POST/GET /opportunities/{id}/analysis`, `GET /opportunities/{id}/similar` (`only_open=true`) | `opportunities` |
 | IA en propuestas | `POST /proposals/{id}/generate` (`sections`, `instructions`); `POST /proposals/{id}/cv` (`profile_id`, CV a medida; además exige `talent.read` y ser responsable o `manage`) | `proposals.write` + `proposal_generator` |
-| IA (admin) | `/admin/ai/prompts` (+ `/{name}/versions`, `/{name}/versions/{v}/activate`, `/{name}/preview`), `/admin/ai/services[/{tipo}]`, `/admin/ai/pricing`, `/admin/ai/budgets[/{id}]`, `/admin/ai/usage`, `/admin/ai/usage/summary`, `/admin/ai/roi`, `/admin/ai/baselines[/{tipo}]`, `/admin/ai/quality`, `/admin/ai/rag/collections`, `POST /admin/ai/rag/reindex`, `/admin/ai/health`, `/admin/ai/compliance`, `GET /admin/ai/gdpr/users/{id}`, `POST /admin/ai/gdpr/users/{id}/erase` | `prompts`, `llm_config`, `audit`, `users` |
+| IA (admin) | `GET/POST /admin/ai/prompts` (publicar versión), `GET /admin/ai/prompts/{name}/versions`, `POST /admin/ai/prompts/{name}/versions/{v}/activate`, `POST /admin/ai/prompts/{name}/preview`, `GET/PATCH /admin/ai/services[/{tipo}]`, `GET/POST /admin/ai/pricing`, `GET/POST/PUT /admin/ai/budgets[/{id}]`, `GET /admin/ai/usage`, `GET /admin/ai/usage/summary`, `GET /admin/ai/roi`, `GET/PUT /admin/ai/baselines[/{tipo}]`, `GET /admin/ai/quality`, `GET /admin/ai/rag/collections`, `POST /admin/ai/rag/reindex`, `GET /admin/ai/health`, `GET /admin/ai/compliance`, `GET /admin/ai/gdpr/users/{id}`, `POST /admin/ai/gdpr/users/{id}/erase` | `prompts`, `llm_config`, `audit`, `users` |
 | Búsqueda | `GET /search?q=&limit=` (oportunidades, documentos y clientes a la vez), `POST /search/opportunities`, `POST /search/documents`, `POST /search/click` (`query_log_id`, `kind`, `object_id`, `position`) | `opportunities.read` / `documents.read` |
 | Asistente | `POST /assistant/query` (`query` máx. 500, `history`, `document_ids`, `opportunity_id`), `POST /assistant/feedback` (`query_log_id`, `rating` 1-5, `expected_intent`) | `opportunities.read` + `copilot_chat` |
 | Búsqueda (admin) | `GET/POST /admin/search/intent-patterns`, `PATCH/DELETE /admin/search/intent-patterns/{id}`, `POST /admin/search/intent/test`, `GET /admin/search/quality?days=`, `GET /admin/search/indexes`, `POST /admin/search/reindex` (`index`) | `search` |
@@ -49,7 +55,7 @@ no responde y el plan B en MySQL está desactivado. Los errores de IA añaden lo
 | Inteligencia comercial | `GET /analytics/heatmap?period=AAAA-MM` (puntuaciones del mes, `config`, `periods`; el mes en curso se calcula si falta, uno pasado sin datos da 404), `PUT /analytics/heatmap/config` (`weight_demand`, `weight_traction`, `weight_economic`, `weight_right_to_win` que suman 100, `lookback_months` 3-36, `version`), `POST /analytics/heatmap/recalculate`, `GET /analytics/service-lines`, `GET/POST /analytics/targets` (`year`; `metric`, `period`, `service_line`, `target_value`), `PATCH/DELETE /analytics/targets/{id}`, `GET /analytics/import/template`, `POST /analytics/import?dry_run=true\|false` (multipart `file`, `.xlsx` hasta 5 MB). `overview` añade `previous`, `pipeline_history` y `targets`. Solo con `X-App-Code: analytics` | `dashboards.read` / `dashboards.write` |
 | Competidores | `GET /analytics/competitors` (`q`, `type`, `service_line`), `POST /analytics/competitors`, `GET/PATCH/DELETE /analytics/competitors/{id}` | `competitors` |
 | Pregunta a tus datos | `POST /analytics/ask` (`question`, `months`, `service_line`, `sector`) | `dashboards.read` + `analytics_assistant` |
-| Usuarios (admin) | `GET /admin/users` (`q`, `status=active\|inactive`, `app`; `items` + `pagination`), `POST /admin/users`, `GET /admin/users/{id}`, `PUT/DELETE /admin/users/{id}/memberships/{app}` (`role`), `POST /admin/users/{id}/deactivate`, `.../reactivate`, `.../mfa/reset` | `users`, `roles` |
+| Usuarios (admin) | `GET /admin/users` (`q`, `status=active\|inactive`, `app`; `items` + `pagination`), `POST /admin/users`, `GET /admin/users/{id}`, `PUT/DELETE /admin/users/{id}/memberships/{app}` (`role`), `POST /admin/users/{id}/deactivate`, `POST /admin/users/{id}/reactivate`, `POST /admin/users/{id}/mfa/reset` | `users`, `roles` |
 | Roles (admin) | `GET /admin/apps` (aplicaciones con módulos, acciones y roles), `PATCH /admin/roles/{id}` (`version`, `permissions`) | `roles` |
 | Auditoría (admin) | `GET /admin/audit` (`action`, `severity`, `user_id`, `days`; `items` + `pagination`), `GET /admin/audit/actions` | `audit` |
 

@@ -14,8 +14,8 @@
 | 6b | Frontend de analytics y admin | Paneles de analítica y administración | 16–17 | Hecha |
 | 7 | Testing y calidad | Tests de integración, seguridad y calidad de IA | 18–20 | Pendiente |
 | 8 | Despliegue y operación | CI/CD con imágenes en GHCR y despliegue aprobado con vuelta atrás, `docker-compose.prod.yml`, HTTPS, Flower, copias de seguridad, avisos por correo, marcado de contenido IA | 21–22, Ap. D | Hecha |
-| 9a | Inteligencia comercial | Mapa de oportunidad con pesos, comparación con el periodo anterior y fotos de cartera, objetivos, competidores con DAFO, importación desde Excel y «Pregunta a tus datos» | 23 | En revisión |
-| 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | Pendiente |
+| 9a | Inteligencia comercial | Mapa de oportunidad con pesos, comparación con el periodo anterior y fotos de cartera, objetivos, competidores con DAFO, importación desde Excel y «Pregunta a tus datos» | 23 | Hecha |
+| 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | En revisión |
 
 ## Del núcleo mínimo a los 17 servicios del libro
 
