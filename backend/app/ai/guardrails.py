@@ -18,16 +18,21 @@ from . import pii
 
 ALLOW, SANITIZE, BLOCK = "allow", "sanitize", "block"
 
+# Se comparan con el texto plegado (_fold): minúsculas sin tildes y con los caracteres
+# parecidos de otros alfabetos convertidos a latinos. Por eso van sin tildes.
 INJECTION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
-    r"\bignore\s+(all\s+|any\s+)?(the\s+)?(previous|prior|above)\s+(instructions|prompts?|rules)",
+    r"\bignore\s+(?:\w+\s+){0,3}(previous|prior|above|earlier)\s+(instructions|prompts?|rules)",
     r"\bdisregard\s+(all\s+|your\s+|the\s+)*(previous\s+|prior\s+)?(instructions|rules)",
     r"\b(reveal|show|print|repeat)\s+(me\s+)?(your|the)\s+(system\s+)?(prompt|instructions)",
+    r"\b(print|repeat|show)\s+(me\s+)?the\s+instructions\s+you\s+were\s+given",
     r"\byou\s+are\s+now\s+(a|an|in)\b",
     r"\b(jailbreak|dan\s+mode|developer\s+mode)\b",
     r"\bact\s+as\s+(an?\s+)?(unrestricted|unfiltered)",
-    r"\bignora\s+(todas\s+)?(las\s+)?instrucciones\s+(anteriores|previas)",
+    r"\b(ignora|olvida|no\s+hagas\s+caso\s+(?:a|de))\s+(?:\w+\s+){0,3}(instrucciones|reglas|restricciones)\s+"
+    r"(anteriores|previas|que\s+te\s+(han|hayan)\s+(dado|puesto))",
     r"\bolvida\s+(todas\s+)?(tus|las)\s+(instrucciones|reglas|restricciones)",
-    r"\b(revela|muestra|repite|ensena|enseña)\s+(me\s+)?(tu|el)\s+(prompt|mensaje)\s+(de|del)\s+sistema",
+    r"\b(ignora|no\s+hagas\s+caso\s+(?:a|de))\s+(todas\s+)?tus\s+(instrucciones|reglas|restricciones)",
+    r"\b(revela|muestra|repite|ensena|dime)(me|nos)?\s+(tu|tus|el|las)\s+(prompt|mensaje|instrucciones)\s+(de|del)\s+sistema",
     r"\bahora\s+eres\s+(un|una)\b",
     r"\bmodo\s+(desarrollador|sin\s+restricciones)\b",
     r"<\s*/?\s*(system|instructions)\s*>",
@@ -84,15 +89,35 @@ def _normalize(text: str) -> str:
     return "".join(ch for ch in text if ch in "\n\t" or unicodedata.category(ch)[0] != "C")
 
 
+# Letras de otros alfabetos que se confunden con las latinas (cirílico y griego)
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+    "ԁ": "d", "һ": "h", "ӏ": "l", "А": "A", "В": "B", "Е": "E", "І": "I", "К": "K", "М": "M", "Н": "H",
+    "О": "O", "Р": "P", "С": "C", "Т": "T", "Х": "X", "α": "a", "ε": "e", "ι": "i", "ο": "o", "ρ": "p",
+    "υ": "u", "Α": "A", "Β": "B", "Ε": "E", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P",
+    "Τ": "T", "Χ": "X",
+})
+# Letras sueltas separadas por guiones o puntos: «I-g-n-o-r-e» → «Ignore»
+_SPLIT_LETTERS = re.compile(r"(?<=\b\w)[-_.*·](?=\w\b)")
+
+
+def _fold(text: str) -> str:
+    """Forma del texto para buscar patrones (no se usa para lo que se envía al modelo)."""
+    text = unicodedata.normalize("NFKD", text.translate(_CONFUSABLES))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
+    return _SPLIT_LETTERS.sub("", text)
+
+
 def check_input(text: str, max_chars: int = 2000) -> GuardrailResult:
     text = _normalize(text or "").strip()
     if not text:
         return GuardrailResult(BLOCK, "", ["empty"])
     if len(text) > max_chars:
         return GuardrailResult(BLOCK, text[:max_chars], ["too_long"])
-    if any(p.search(text) for p in INJECTION_PATTERNS):
+    folded = _fold(text)
+    if any(p.search(folded) for p in INJECTION_PATTERNS):
         return GuardrailResult(BLOCK, text, ["prompt_injection"])
-    if any(p.search(text) for p in MALICIOUS_PATTERNS):
+    if any(p.search(folded) for p in MALICIOUS_PATTERNS):
         return GuardrailResult(BLOCK, text, ["malicious_request"])
     redacted, found = pii.redact(text)
     if found:

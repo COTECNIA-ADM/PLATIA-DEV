@@ -16,6 +16,7 @@ Consulta (``ask``):
 6. Guardarraíles de salida y, para una muestra, evaluación automática de calidad.
 """
 import random
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -156,7 +157,10 @@ def format_sources(hits: list[Hit], max_chars: int = 3000) -> str:
     blocks = []
     for n, h in enumerate(hits, start=1):
         page = f", página {h.page}" if h.page else ""
-        blocks.append(f'<source n="{n}" title="{h.document.title}{page}">\n{h.parent_text(max_chars)}\n</source>')
+        # El texto del documento no puede cerrar su bloque ni abrir otro con otra numeración
+        text = re.sub(r"<(\s*/?\s*sources?\b)", r"‹\1", h.parent_text(max_chars), flags=re.IGNORECASE)
+        title = (h.document.title or "").replace('"', "'").replace("<", "‹")
+        blocks.append(f'<source n="{n}" title="{title}{page}">\n{text}\n</source>')
     return "\n\n".join(blocks)
 
 

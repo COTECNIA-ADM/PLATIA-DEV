@@ -406,20 +406,35 @@ def _seed_agents() -> int:
     return created
 
 
+# Versiones iniciales que se han mejorado después. Si la activa de una instalación es
+# exactamente una de estas (nadie la ha editado), se publica la versión nueva del fichero.
+# Una versión editada desde Admin no se toca nunca.
+SUPERSEDED_SEED_HASHES = {
+    # Fase 7c: la conversación y la pregunta van en etiquetas y se declaran como datos
+    "rag.query_rewrite": {"75224525ccec0e1d7138caea0bc272fd9d58b6071cdd0bff14f426fb1a11e9bc"},
+}
+
+
 def _seed_prompts() -> int:
-    """Primera versión de cada prompt. Si ya hay alguna versión, no se toca."""
+    """Primera versión de cada prompt. Si ya hay alguna versión, no se toca, salvo que la
+    activa sea una versión inicial superada y sin editar (``SUPERSEDED_SEED_HASHES``)."""
     from .ai import prompts
 
     services = {prompt: service for service, *_, prompt, _desc in LLM_SERVICES if prompt}
     created = 0
     for system_file in sorted(PROMPT_SEEDS_DIR.glob("*.system.md")):
         name = system_file.name.removesuffix(".system.md")
-        if db.session.scalar(db.select(Prompt.id).filter_by(name=name).limit(1)) is not None:
-            continue
         user_file = PROMPT_SEEDS_DIR / f"{name}.user.md"
-        prompts.publish(name, system_file.read_text(encoding="utf-8").strip(),
-                        user_file.read_text(encoding="utf-8").strip() if user_file.exists() else None,
-                        author_id=None, notes="Versión inicial",
+        system = system_file.read_text(encoding="utf-8").strip()
+        user = user_file.read_text(encoding="utf-8").strip() if user_file.exists() else None
+        if db.session.scalar(db.select(Prompt.id).filter_by(name=name).limit(1)) is not None:
+            active = db.session.scalar(db.select(Prompt).filter_by(name=name, is_active=True))
+            if active is not None and active.content_hash in SUPERSEDED_SEED_HASHES.get(name, set()):
+                prompts.publish(name, system, user, author_id=None,
+                                notes="Actualización de la versión inicial (refuerzo contra la inyección)")
+                created += 1
+            continue
+        prompts.publish(name, system, user, author_id=None, notes="Versión inicial",
                         service_type=services.get(name) or ("agent_copilot" if name.startswith("agent.") else None))
         created += 1
     return created

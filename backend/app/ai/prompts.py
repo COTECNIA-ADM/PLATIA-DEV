@@ -48,14 +48,31 @@ def variables_of(*templates: str | None) -> set[str]:
     return {m.group(1) for t in templates if t for m in VARIABLE.finditer(t)}
 
 
+_TEMPLATE_TAG = re.compile(r"<\s*/?\s*([a-z_]+)[^<>]*>", re.IGNORECASE)
+
+
+def _neutralize_tags(value: str, tags: set[str]) -> str:
+    """Un texto de fuera (documento, conversación) no puede cerrar ni abrir las etiquetas
+    que delimitan su bloque en la plantilla: «</document>» pasa a «‹/document>»."""
+    if not tags or "<" not in value:
+        return value
+    pattern = re.compile(r"<(\s*/?\s*(?:" + "|".join(sorted(map(re.escape, tags))) + r")\b)", re.IGNORECASE)
+    return pattern.sub(r"‹\1", value)
+
+
 def render(template: str | None, variables: dict) -> str:
     if not template:
         return ""
     missing = variables_of(template) - set(variables)
     if missing:
         raise ValidationError(f"Faltan variables del prompt: {', '.join(sorted(missing))}.")
-    return VARIABLE.sub(lambda m: str(variables[m.group(1)] if variables[m.group(1)] is not None else ""),
-                        template)
+    tags = {m.group(1).lower() for m in _TEMPLATE_TAG.finditer(template)} | {"system", "instructions"}
+
+    def value(m: re.Match) -> str:
+        raw = variables[m.group(1)]
+        return _neutralize_tags(str(raw), tags) if raw is not None else ""
+
+    return VARIABLE.sub(value, template)
 
 
 def _cache_key(name: str) -> str:

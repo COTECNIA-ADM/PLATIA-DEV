@@ -1,4 +1,8 @@
 Conversación anterior (puede estar vacía):
+<conversation>
 {{conversation}}
+</conversation>
 
-Pregunta: {{question}}
+<question>
+{{question}}
+</question>

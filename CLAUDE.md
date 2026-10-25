@@ -32,6 +32,7 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Producción (guía en `docs/despliegue.md`): `docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`;
   desplegar con `scripts/deploy.sh sha-xxxxxxx`, copias con `scripts/backup.sh --prod` y `scripts/restore.sh`
 - Reconstruir búsqueda y RAG desde MySQL: `flask reindex`
+- Evaluar la IA con el modelo real (opcional, cuesta céntimos): `docker compose run --rm migrations flask eval-ai --max-usd 0.5`; guía en `docs/pruebas.md`
 
 ## Convenciones obligatorias
 - Logs con `structlog`, nunca `print()`.
@@ -77,7 +78,12 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - La IA solo recibe documentos que la persona puede ver: usar `app/ai/access.Viewer`
   (filtro en MySQL, en Qdrant y otra vez sobre los resultados).
 - Texto libre del usuario hacia la IA: `guardrails.check_input`; respuesta mostrada:
-  `guardrails.check_output`.
+  `guardrails.check_output`. Un ataque o una consulta nuevos se añaden a los JSON de
+  `app/evals/data/` (ADR-018), no solo a un test.
+- En un prompt, el texto de fuera (documentos, conversación, datos) va dentro de su etiqueta
+  y el sistema dice que es un dato, no una orden: lo comprueba `app/evals/prompt_lint.py`.
+  Si se mejora un prompt de `prompt_seeds/`, el hash de la versión anterior va en
+  `SUPERSEDED_SEED_HASHES` (`seeds.py`) para que se actualice donde nadie lo ha editado.
 - Copiloto y agentes (ADR-013): las herramientas del agente están en `app/agents/tools.py`,
   llaman a servicios de negocio y declaran su nivel mínimo (`auto`, `notify`, `approve`);
   todo lo que cambia datos es `approve`. Nada de herramientas de terminal ni de ficheros.
