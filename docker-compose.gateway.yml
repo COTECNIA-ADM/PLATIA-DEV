@@ -1,0 +1,17 @@
+# Conexión con el gateway LLM corporativo (ADR-019).
+#
+# Une el servicio de IA a la red que crea el proyecto platia-gateway (`platia_llm_net`),
+# donde el gateway responde como `platia-gateway`. Solo el servicio de IA entra en esa red:
+# el backend, los workers y los datos siguen sin verla.
+#
+# Uso (con el gateway ya levantado y LLM_GATEWAY_ENABLED=true en .env):
+#   docker compose -f docker-compose.yml -f docker-compose.gateway.yml up -d
+# En producción se añade además docker-compose.prod.yml.
+services:
+  ai_service:
+    networks: [backend_net, data_net, llm_net]
+
+networks:
+  llm_net:
+    external: true
+    name: platia_llm_net

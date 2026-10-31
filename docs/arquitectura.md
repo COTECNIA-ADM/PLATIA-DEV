@@ -80,6 +80,11 @@ mientras se genera, el backend hace de pasarela del streaming SSE de `ai_service
 el bucle del agente: ejecuta las herramientas con los permisos de la persona y se para a
 pedir aprobación antes de cambiar nada (ADR-013).
 
+Opcionalmente (`LLM_GATEWAY_ENABLED=true`), `ai_service` no llama a Anthropic sino al
+gateway LLM corporativo (`platia-gateway`), por una red propia que solo comparte el
+servicio de IA. El gateway guarda la clave del proveedor y audita cada llamada con su
+tarea, su persona y el `correlation_id` de PLATIA (ADR-019).
+
 ## Crecimiento previsto
 
 | Servicio | Cuándo entra | Motivo |

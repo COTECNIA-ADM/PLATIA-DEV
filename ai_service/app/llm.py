@@ -66,7 +66,7 @@ def parse_json(text: str) -> dict | list:
 async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[dict], system: str,
                    messages: list[dict], max_tokens: int, effort: str | None, json_schema: dict | None,
                    timeout: float, service_type: str, tools: list[dict] | None = None,
-                   on_text=None) -> CompletionOutcome:
+                   on_text=None, headers: dict[str, str] | None = None) -> CompletionOutcome:
     outcome = CompletionOutcome()
     streamed = {"any": False}
 
@@ -96,7 +96,8 @@ async def complete(*, providers: dict, breaker: CircuitBreaker, targets: list[di
                 result = await provider.complete(model=model, system=system, messages=convo,
                                                  max_tokens=max_tokens, effort=effort,
                                                  json_schema=json_schema, timeout=timeout, tools=tools,
-                                                 on_text=relay if on_text is not None else None)
+                                                 on_text=relay if on_text is not None else None,
+                                                 headers=headers)
             except ProviderError as exc:
                 latency = int((time.monotonic() - started) * 1000)
                 outcome.attempts.append(Attempt(name, model, False, latency, error_type=exc.error_type))

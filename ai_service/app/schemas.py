@@ -57,6 +57,8 @@ class CompleteRequest(Strict):
     tools: list[Tool] | None = Field(default=None, max_length=20)
     timeout_seconds: float = Field(default=180, ge=5, le=900)
     correlation_id: str | None = Field(default=None, max_length=64)
+    # Persona que origina la llamada (id de PLATIA), para la auditoría y las cuotas del gateway
+    user_ref: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._:@-]{1,128}$")
 
 
 class EmbedRequest(Strict):

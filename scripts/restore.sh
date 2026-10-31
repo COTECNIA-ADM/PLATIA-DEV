@@ -16,6 +16,8 @@ if [ "${2:-}" = "--prod" ]; then
   COMPOSE+=(-f docker-compose.prod.yml)
   APP+=(flower)
 fi
+# Con el gateway LLM, el servicio de IA no debe perder su red al rearrancar (ADR-019)
+grep -qs '^LLM_GATEWAY_ENABLED=true' .env && COMPOSE+=(-f docker-compose.gateway.yml)
 [ -f "$src/mysql.sql.gz" ] || { echo "No encuentro $src/mysql.sql.gz"; exit 1; }
 
 read -r -p "Se borrarán los datos actuales y se cargará $src. Escribe RESTAURAR para seguir: " answer

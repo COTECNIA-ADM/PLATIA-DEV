@@ -20,6 +20,10 @@ def _int(name: str, default: str) -> int:
     return int(os.environ.get(name, default))
 
 
+def _bool(name: str, default: str) -> bool:
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "si", "sí")
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str = field(default_factory=lambda: _env("AI_SERVICE_API_KEY"))
@@ -31,6 +35,14 @@ class Settings:
     fast_model: str = field(default_factory=lambda: _env("CLAUDE_FAST_MODEL", "claude-haiku-5-5"))
     llm_timeout_seconds: float = field(default_factory=lambda: _float("LLM_TIMEOUT_SECONDS", "180"))
     llm_max_retries: int = field(default_factory=lambda: _int("LLM_MAX_RETRIES", "2"))
+
+    # --- Gateway LLM corporativo (PLATIA Gateway, repo platia-gateway; ADR-019). Activado,
+    # las llamadas a Claude salen por el gateway con su clave plgw-app-... en vez de ir
+    # directas a Anthropic, y ANTHROPIC_API_KEY no se usa. Si el gateway no responde, la
+    # llamada falla: volver a la llamada directa es una decisión manual (poner false).
+    llm_gateway_enabled: bool = field(default_factory=lambda: _bool("LLM_GATEWAY_ENABLED", "false"))
+    llm_gateway_url: str = field(default_factory=lambda: _env("LLM_GATEWAY_URL", "http://platia-gateway:8000"))
+    llm_gateway_api_key: str = field(default_factory=lambda: _env("LLM_GATEWAY_API_KEY"))
 
     # --- Proveedor de reserva opcional con API compatible con OpenAI (Azure OpenAI,
     # OpenAI, Ollama o LM Studio). Vacío = sin reserva externa.

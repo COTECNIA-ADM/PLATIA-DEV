@@ -194,7 +194,23 @@ y de documentos se regeneran solos en unos minutos (`flask reindex`).
 
 Prueba una restauración completa en otra máquina al menos una vez por trimestre.
 
-## 10. Operación diaria
+## 10. Conexión con el gateway LLM (opcional)
+
+Con el gateway corporativo (`cotecnia-adm/platia-gateway`) levantado en el mismo servidor,
+PLATIA puede llamar a Claude a través de él (ADR-019):
+
+1. En el gateway, `scripts/alta_platia.sh` da de alta la aplicación `platia` con sus
+   modelos y precios, y escribe una clave `plgw-app-platia-…`.
+2. En el `.env` de PLATIA: `LLM_GATEWAY_ENABLED=true` y `LLM_GATEWAY_API_KEY=<esa clave>`.
+3. Rearrancar con el fichero de la red compartida:
+   `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.gateway.yml up -d`.
+   `deploy.sh` y `restore.sh` lo añaden solos cuando el `.env` tiene el gateway activo.
+
+Volver a la llamada directa: `LLM_GATEWAY_ENABLED=false`, `ANTHROPIC_API_KEY` puesta y
+rearrancar `ai_service`. Mientras el gateway esté activo no hay reserva directa: si el
+gateway cae, la IA de PLATIA no responde hasta que vuelva.
+
+## 11. Operación diaria
 
 ```bash
 alias pc='docker compose -f docker-compose.yml -f docker-compose.prod.yml'

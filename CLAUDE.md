@@ -32,6 +32,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Producción (guía en `docs/despliegue.md`): `docker compose -f docker-compose.yml -f docker-compose.prod.yml ...`;
   desplegar con `scripts/deploy.sh sha-xxxxxxx`, copias con `scripts/backup.sh --prod` y `scripts/restore.sh`
 - Reconstruir búsqueda y RAG desde MySQL: `flask reindex`
+- Gateway LLM (ADR-019): `LLM_GATEWAY_ENABLED=true` y `LLM_GATEWAY_API_KEY` en `.env`, y levantar
+  con `-f docker-compose.yml -f docker-compose.gateway.yml`; guía en `docs/despliegue.md`
 - Evaluar la IA con el modelo real (opcional, cuesta céntimos): `docker compose run --rm migrations flask eval-ai --max-usd 0.5`; guía en `docs/pruebas.md`
 
 ## Convenciones obligatorias
