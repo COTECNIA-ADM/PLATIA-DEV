@@ -25,6 +25,8 @@ set -a; source .env; set +a
 : "${SERVER_NAME:?Falta SERVER_NAME en .env}"
 
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
+# Con el gateway LLM, el servicio de IA entra también en su red (ADR-019)
+[ "${LLM_GATEWAY_ENABLED:-false}" = "true" ] && COMPOSE+=(-f docker-compose.gateway.yml)
 mkdir -p .deploy
 PREVIOUS="$(cat .deploy/current 2>/dev/null || true)"
 PREVIOUS_COMMIT="$(cat .deploy/current_commit 2>/dev/null || true)"

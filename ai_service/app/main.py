@@ -104,7 +104,13 @@ async def health(settings: Settings = Depends(get_settings), runtime: Runtime = 
 
     # No se llama a la API de Anthropic en cada health check (coste): solo se
     # comprueba que la clave está configurada y el estado del circuit breaker.
-    checks["anthropic_key"] = "configured" if settings.anthropic_api_key else "missing"
+    if settings.llm_gateway_enabled:
+        # Las llamadas salen por el gateway corporativo: la credencial es la suya
+        checks["llm_gateway"] = "configured" if settings.llm_gateway_api_key else "missing"
+        llm_credential = checks["llm_gateway"]
+    else:
+        checks["anthropic_key"] = "configured" if settings.anthropic_api_key else "missing"
+        llm_credential = checks["anthropic_key"]
     checks["anthropic_circuit"] = runtime.breaker.state("anthropic")
     checks["embeddings"] = getattr(runtime.embedder, "status", "ready")
 
@@ -120,7 +126,7 @@ async def health(settings: Settings = Depends(get_settings), runtime: Runtime = 
 
     if checks["qdrant"] != "healthy" or checks["embeddings"] == "error":
         status = "unhealthy"
-    elif checks["anthropic_key"] != "configured" or checks["anthropic_circuit"] == "open" \
+    elif llm_credential != "configured" or checks["anthropic_circuit"] == "open" \
             or checks["embeddings"] != "ready":
         status = "degraded"
     else:
@@ -132,7 +138,8 @@ async def health(settings: Settings = Depends(get_settings), runtime: Runtime = 
                    "fast": settings.fast_model},
         "embedding": {"provider": runtime.embedder.provider, "model": runtime.embedder.model,
                       "dims": runtime.embedder.dims},
-        "fallback_configured": bool(settings.fallback_base_url),
+        "fallback_configured": bool(settings.fallback_base_url) and not settings.llm_gateway_enabled,
+        "llm_gateway": settings.llm_gateway_enabled,
         "checks": checks,
     }
 
@@ -149,8 +156,22 @@ async def complete(body: CompleteRequest, runtime: Runtime = Depends(get_runtime
     return payload
 
 
+def gateway_headers(body: CompleteRequest, settings: Settings) -> dict[str, str] | None:
+    """Cabeceras para el gateway LLM: tarea, persona y correlación (ADR-019)."""
+    if not settings.llm_gateway_enabled:
+        return None
+    headers = {"X-Platia-Purpose": body.service_type}
+    if body.user_ref:
+        headers["X-Platia-User-Id"] = body.user_ref
+    if body.correlation_id:
+        # Las llamadas de una misma tarea comparten id: el gateway las agrupa igual que PLATIA
+        headers["X-Request-ID"] = body.correlation_id
+    return headers
+
+
 def _llm_kwargs(body: CompleteRequest, runtime: Runtime) -> dict:
     return dict(
+        headers=gateway_headers(body, runtime.settings),
         providers=runtime.providers, breaker=runtime.breaker,
         targets=[t.model_dump() for t in body.targets], system=body.system,
         messages=[m.model_dump() for m in body.messages], max_tokens=body.max_tokens, effort=body.effort,

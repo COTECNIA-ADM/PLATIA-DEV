@@ -208,6 +208,11 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-180}
       FALLBACK_LLM_BASE_URL: ${FALLBACK_LLM_BASE_URL:-}
       FALLBACK_LLM_API_KEY: ${FALLBACK_LLM_API_KEY:-}
+      # Gateway LLM corporativo (ADR-019): con true, Claude se llama a través del gateway.
+      # La red compartida se añade con docker-compose.gateway.yml
+      LLM_GATEWAY_ENABLED: ${LLM_GATEWAY_ENABLED:-false}
+      LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://platia-gateway:8000}
+      LLM_GATEWAY_API_KEY: ${LLM_GATEWAY_API_KEY:-}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}

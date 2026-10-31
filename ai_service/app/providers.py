@@ -5,6 +5,11 @@
   OpenAI (Azure OpenAI, OpenAI, Ollama, LM Studio). Solo se usa si se configura
   ``FALLBACK_LLM_BASE_URL`` y el backend lo pone en la cadena de un servicio.
 
+Con ``LLM_GATEWAY_ENABLED`` (ADR-019), el proveedor ``anthropic`` habla con el gateway
+corporativo en lugar de con Anthropic: mismo SDK y misma API, otra URL y otra clave, y
+cabeceras ``X-Platia-*`` con la tarea, la persona y la correlación. La reserva directa
+``openai_compatible`` se desactiva: todo lo que sale hacia un modelo pasa por el gateway.
+
 Cada proveedor devuelve un ``ProviderResult`` con el texto y los tokens; los
 errores se traducen a ``ProviderError`` indicando si tiene sentido probar con el
 siguiente proveedor de la cadena.
@@ -73,23 +78,36 @@ class AnthropicProvider:
         self._client = client
 
     @property
+    def via_gateway(self) -> bool:
+        return self._settings.llm_gateway_enabled
+
+    @property
     def configured(self) -> bool:
-        return bool(self._settings.anthropic_api_key) or self._client is not None
+        if self._client is not None:
+            return True
+        if self.via_gateway:
+            return bool(self._settings.llm_gateway_api_key)
+        return bool(self._settings.anthropic_api_key)
 
     def _get_client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
-            self._client = anthropic.AsyncAnthropic(
-                api_key=self._settings.anthropic_api_key,
-                max_retries=self._settings.llm_max_retries,
-                timeout=self._settings.llm_timeout_seconds,
-            )
+            options = {"max_retries": self._settings.llm_max_retries, "timeout": self._settings.llm_timeout_seconds}
+            if self.via_gateway:
+                # El SDK añade /v1/messages a la URL base y manda la clave como Bearer (el gateway
+                # acepta también x-api-key)
+                self._client = anthropic.AsyncAnthropic(api_key=self._settings.llm_gateway_api_key,
+                                                        base_url=self._settings.llm_gateway_url, **options)
+            else:
+                self._client = anthropic.AsyncAnthropic(api_key=self._settings.anthropic_api_key, **options)
         return self._client
 
     async def complete(self, *, model: str, system: str, messages: list[dict], max_tokens: int,
                        effort: str | None, json_schema: dict | None, timeout: float,
-                       tools: list[dict] | None = None, on_text: OnText = None) -> ProviderResult:
+                       tools: list[dict] | None = None, on_text: OnText = None,
+                       headers: dict[str, str] | None = None) -> ProviderResult:
         if not self.configured:
-            raise ProviderError("ANTHROPIC_API_KEY no está configurada", "not_configured")
+            missing = "LLM_GATEWAY_API_KEY" if self.via_gateway else "ANTHROPIC_API_KEY"
+            raise ProviderError(f"{missing} no está configurada", "not_configured")
         kwargs: dict = {
             "model": model,
             "max_tokens": max_tokens,
@@ -108,6 +126,9 @@ class AnthropicProvider:
             kwargs["output_config"] = output_config
         if tools:
             kwargs["tools"] = tools
+        if headers:
+            # Cabeceras del gateway (tarea, persona, correlación): Anthropic no las recibe
+            kwargs["extra_headers"] = headers
         try:
             # Siempre en streaming: evita los cortes por tiempo en respuestas largas.
             # Con on_text, el texto se reenvía según llega (chat del copiloto).
@@ -123,7 +144,8 @@ class AnthropicProvider:
         except anthropic.APITimeoutError as exc:
             raise ProviderError("Tiempo de espera agotado", "timeout") from exc
         except anthropic.APIConnectionError as exc:
-            raise ProviderError("No se puede conectar con Anthropic", "connection") from exc
+            target = "el gateway LLM" if self.via_gateway else "Anthropic"
+            raise ProviderError(f"No se puede conectar con {target}", "connection") from exc
         except anthropic.APIStatusError as exc:
             raise ProviderError(_short(exc), _status_type(exc.status_code), status_code=exc.status_code) from exc
 
@@ -152,11 +174,13 @@ class OpenAICompatibleProvider:
 
     @property
     def configured(self) -> bool:
-        return bool(self._settings.fallback_base_url)
+        # Con el gateway activo no hay salida directa a otro proveedor (ADR-019)
+        return bool(self._settings.fallback_base_url) and not self._settings.llm_gateway_enabled
 
     async def complete(self, *, model: str, system: str, messages: list[dict], max_tokens: int,
                        effort: str | None, json_schema: dict | None, timeout: float,
-                       tools: list[dict] | None = None, on_text: OnText = None) -> ProviderResult:
+                       tools: list[dict] | None = None, on_text: OnText = None,
+                       headers: dict[str, str] | None = None) -> ProviderResult:
         if not self.configured:
             raise ProviderError("FALLBACK_LLM_BASE_URL no está configurada", "not_configured")
         if tools or any(not isinstance(m.get("content"), str) for m in messages):

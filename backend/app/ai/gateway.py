@@ -154,6 +154,9 @@ def _call_stream(config: LLMServiceConfig, prompt: prompts.ActivePrompt, system:
     }
     if tools:
         payload["tools"] = tools
+    if user_id:
+        # Para la auditoría y las cuotas por persona del gateway LLM, si está activo (ADR-019)
+        payload["user_ref"] = str(user_id)
     started = time.monotonic()
     try:
         client = get_ai_client()
