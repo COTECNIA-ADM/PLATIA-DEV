@@ -1,5 +1,5 @@
 """Tareas de Celery: se ejecutan en línea (task_always_eager) contra SQLite y fakeredis."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -9,14 +9,17 @@ from app.models import (Alert, AuditLog, Document, FailedTask, Notification, Opp
 from app.queue import backoff_with_jitter, task_lock, TaskAlreadyRunning
 from app.tasks import alerts, documents, sync, system
 
-ATOM = b"""<?xml version="1.0" encoding="utf-8"?>
+# Fecha de ayer: el escaneo proactivo solo mira las últimas ALERT_LOOKBACK_HOURS (48 h).
+_AYER = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+
+ATOM = ("""<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Licitaciones</title>
   <entry>
     <id>urn:licitacion:2026-001</id>
     <title>Servicio de ciberseguridad: SOC y respuesta a incidentes</title>
     <summary>Contratacion de un SOC 24x7, pentest anual y adecuacion al ENS.</summary>
-    <updated>2026-10-23T10:00:00+02:00</updated>
+    <updated>{fecha}T10:00:00+02:00</updated>
     <author><name>Diputacion de Ejemplo</name></author>
     <link href="https://contratacion.example/2026-001"/>
     <category term="72212730"/>
@@ -26,7 +29,7 @@ ATOM = b"""<?xml version="1.0" encoding="utf-8"?>
     <title>Suministro de mobiliario</title>
     <summary>Sillas y mesas.</summary>
   </entry>
-</feed>"""
+</feed>""").format(fecha=_AYER).encode()
 
 
 def test_backoff_grows_with_jitter_and_cap():
