@@ -27,6 +27,10 @@ set -a; source .env; set +a
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
 # Con el gateway LLM, el servicio de IA entra también en su red (ADR-019)
 [ "${LLM_GATEWAY_ENABLED:-false}" = "true" ] && COMPOSE+=(-f docker-compose.gateway.yml)
+# n8n (ADR-020) es por ahora solo de desarrollo: en producción llegará con HTTPS
+if [ "${N8N_ENABLED:-false}" = "true" ]; then
+  echo "N8N_ENABLED=true no se admite todavía en producción (ADR-020)"; exit 1
+fi
 mkdir -p .deploy
 PREVIOUS="$(cat .deploy/current 2>/dev/null || true)"
 PREVIOUS_COMMIT="$(cat .deploy/current_commit 2>/dev/null || true)"

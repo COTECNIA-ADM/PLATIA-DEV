@@ -210,7 +210,23 @@ Volver a la llamada directa: `LLM_GATEWAY_ENABLED=false`, `ANTHROPIC_API_KEY` pu
 rearrancar `ai_service`. Mientras el gateway esté activo no hay reserva directa: si el
 gateway cae, la IA de PLATIA no responde hasta que vuelva.
 
-## 11. Operación diaria
+## 11. n8n para el portal Low-Code (solo desarrollo)
+
+n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no la admite.
+
+1. `python scripts/generate_env.py --actualizar` añade `N8N_ENCRYPTION_KEY` y el resto.
+2. En `.env`: `N8N_ENABLED=true`. Si el puerto 5679 está ocupado, cambia `N8N_HTTP_PORT` y
+   `N8N_PUBLIC_URL` a la vez.
+3. `docker compose -f docker-compose.yml -f docker-compose.n8n.yml up -d`.
+4. Entra en http://localhost:5679 y crea la cuenta de propietario.
+
+Los flujos y credenciales viven en el volumen `n8n_data`; `backup.sh` los guarda en
+`n8n.tgz` y `restore.sh` los devuelve. No pierdas `N8N_ENCRYPTION_KEY`: sin ella no se
+pueden leer las credenciales guardadas. Para quitarlo, `N8N_ENABLED=false` y
+`docker compose -f docker-compose.yml -f docker-compose.n8n.yml rm -sf n8n` (el volumen se
+conserva).
+
+## 12. Operación diaria
 
 ```bash
 alias pc='docker compose -f docker-compose.yml -f docker-compose.prod.yml'

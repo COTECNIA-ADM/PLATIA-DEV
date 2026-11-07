@@ -18,6 +18,9 @@ if [ "${2:-}" = "--prod" ]; then
 fi
 # Con el gateway LLM, el servicio de IA no debe perder su red al rearrancar (ADR-019)
 grep -qs '^LLM_GATEWAY_ENABLED=true' .env && COMPOSE+=(-f docker-compose.gateway.yml)
+# Con n8n (ADR-020), sus flujos y credenciales vuelven con la copia si la trae
+N8N=false
+grep -qs '^N8N_ENABLED=true' .env && { N8N=true; COMPOSE+=(-f docker-compose.n8n.yml); APP+=(n8n); }
 [ -f "$src/mysql.sql.gz" ] || { echo "No encuentro $src/mysql.sql.gz"; exit 1; }
 
 read -r -p "Se borrarán los datos actuales y se cargará $src. Escribe RESTAURAR para seguir: " answer
@@ -32,6 +35,12 @@ gunzip -c "$src/mysql.sql.gz" | "${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="
 echo "Documentos..."
 "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint sh backend \
   -c 'find /data/documents -mindepth 1 -delete && tar xzf - -C /data/documents' < "$src/documents.tgz"
+
+if [ "$N8N" = true ] && [ -f "$src/n8n.tgz" ]; then
+  echo "n8n..."
+  "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint sh n8n \
+    -c 'find /home/node/.n8n -mindepth 1 -delete && tar xzf - -C /home/node/.n8n' < "$src/n8n.tgz"
+fi
 
 echo "Arrancando..."
 "${COMPOSE[@]}" up -d --no-build

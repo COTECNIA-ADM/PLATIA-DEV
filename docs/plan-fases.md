@@ -18,6 +18,11 @@
 | 8 | Despliegue y operación | CI/CD con imágenes en GHCR y despliegue aprobado con vuelta atrás, `docker-compose.prod.yml`, HTTPS, Flower, copias de seguridad, avisos por correo, marcado de contenido IA | 21–22, Ap. D | Hecha |
 | 9a | Inteligencia comercial | Mapa de oportunidad con pesos, comparación con el periodo anterior y fotos de cartera, objetivos, competidores con DAFO, importación desde Excel y «Pregunta a tus datos» | 23 | Hecha |
 | 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | Hecha |
+| L0 | n8n conectado | Capa `docker-compose.n8n.yml` con red propia, volumen, versión fijada y nodos peligrosos fuera; editor por el Nginx de PLATIA; copias (ADR-020) | — | Hecha |
+| L1 | Portal Low-Code | Aplicación `automation` del frontal: roles, inicio y catálogo de solo lectura | — | Pendiente |
+| L2 | Ejecutar y seguir | Catálogo y ejecuciones en BD, tarea en la cola `automation`, webhook firmado, clave de integración y primeros casos | — | Pendiente |
+| L3 | Taller y publicación | Plantillas versionadas en `automations/`, borradores y revisión con comprobaciones | — | Pendiente |
+| L4 | Monitorización | Flujo de errores global, consumo de IA y segunda ola de casos | — | Pendiente |
 
 ## Del núcleo mínimo a los 17 servicios del libro
 

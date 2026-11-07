@@ -1,0 +1,60 @@
+# Motor de automatizaciones n8n para el portal Low-Code (ADR-020).
+#
+# n8n entra en una red propia (`automation_net`) que solo comparte con Nginx: no ve
+# MySQL, Redis, Qdrant ni Meilisearch (ADR-005). No publica puerto: el editor se sirve
+# por el Nginx de PLATIA en un puerto aparte (N8N_HTTP_PORT, 5679 por defecto), en la
+# raíz, porque n8n desaconseja servirlo en una subruta detrás de un proxy.
+#
+# Uso (con N8N_ENABLED=true y N8N_ENCRYPTION_KEY en .env):
+#   docker compose -f docker-compose.yml -f docker-compose.n8n.yml up -d
+# La primera vez, entra en http://localhost:5679 y crea la cuenta de propietario.
+# Por ahora es solo para desarrollo: en producción llegará con HTTPS y su subdominio.
+services:
+  n8n:
+    image: n8nio/n8n:${N8N_VERSION:-2.41.6}
+    environment:
+      # La clave cifra las credenciales que guarda n8n: si se pierde, no se pueden leer
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Falta N8N_ENCRYPTION_KEY en .env}
+      N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_URL:-http://localhost:5679/}
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5679/}
+      N8N_LISTEN_ADDRESS: 0.0.0.0           # sin depender de IPv6 en la red de Docker
+      N8N_PROXY_HOPS: "1"
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}   # true en cuanto haya HTTPS
+      GENERIC_TIMEZONE: ${TIMEZONE:-Europe/Madrid}
+      TZ: ${TIMEZONE:-Europe/Madrid}
+      # Sin telemetría ni avisos de versión hacia fuera
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # Recortes (ADR-020, igual que los agentes de ADR-013): sin terminal, ficheros ni git,
+      # y sin leer las variables de entorno desde un flujo
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger","n8n-nodes-base.readWriteFile","n8n-nodes-base.ssh","n8n-nodes-base.git"]'
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      N8N_RESTRICT_FILE_ACCESS_TO: /home/node/.n8n-files
+      # Historial de ejecuciones acotado
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: ${N8N_EXECUTIONS_MAX_AGE_HOURS:-336}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    mem_limit: 1g
+    restart: unless-stopped
+    networks: [automation_net]
+
+  nginx:
+    ports:
+      - "${N8N_HTTP_PORT:-5679}:5679"
+    volumes:
+      - ./nginx/n8n.conf:/etc/nginx/conf.d/n8n.conf:ro
+    networks: [frontend_net, backend_net, automation_net]
+
+networks:
+  automation_net:
+
+volumes:
+  n8n_data:

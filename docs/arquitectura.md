@@ -96,6 +96,7 @@ tarea, su persona y el `correlation_id` de PLATIA (ADR-019).
 | ~~`analytics_frontend`, `admin_frontend`~~ | Fase 6 | Finalmente son dos entradas más del contenedor `frontend` (ADR-015) |
 | `flower`, `certbot` (solo producción) | Fase 8 (hecho) | Estado de las colas tras nginx con contraseña; renovación de Let's Encrypt (ADR-016) |
 | `celery_automation` + Selenium (hub y 3 nodos) | Posterior | RPA aislada en `rpa_net` |
+| `n8n` (capa opcional) | Fase L0 (hecho, solo desarrollo) | Motor del portal Low-Code, en `automation_net` y sin datos de PLATIA (ADR-020) |
 
 ## Producción
 
