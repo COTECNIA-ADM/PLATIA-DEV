@@ -33,6 +33,8 @@ TASK_ROUTES = {
     "tasks.sync.*": {"queue": "sync"},
     "tasks.search.*": {"queue": "sync"},
     "tasks.crm.*": {"queue": "crm"},
+    # Revisión periódica: va a default para no depender del worker de automation
+    "tasks.automation.expire_stale": {"queue": "default"},
     "tasks.automation.*": {"queue": "automation"},
     "tasks.alerts.*": {"queue": "priority"},
     "tasks.notifications.*": {"queue": "default"},
@@ -128,6 +130,11 @@ BEAT_SCHEDULE = {
         "task": "tasks.agents.expire_approvals",
         "schedule": crontab(minute="*/5"),
     },
+    # --- Portal Low-Code (ADR-020, fase L2)
+    "automation-expire-stale-runs": {
+        "task": "tasks.automation.expire_stale",
+        "schedule": crontab(minute="*/10"),
+    },
     # --- Inteligencia comercial (fase 9a, Capítulo 23)
     "analytics-pipeline-snapshot": {
         "task": "tasks.analytics.take_snapshot",
@@ -141,7 +148,7 @@ BEAT_SCHEDULE = {
 
 TASK_MODULES = ["app.tasks.documents", "app.tasks.proposals", "app.tasks.alerts", "app.tasks.sync",
                 "app.tasks.system", "app.tasks.ai", "app.tasks.search", "app.tasks.agents",
-                "app.tasks.notifications", "app.tasks.analytics"]
+                "app.tasks.notifications", "app.tasks.analytics", "app.tasks.automation"]
 
 _flask_app: Flask | None = None
 

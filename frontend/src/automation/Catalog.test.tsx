@@ -16,7 +16,7 @@ describe('Catalog', () => {
       'GET /api/automation/catalog': {
         body: {
           items: [
-            { id: 'b2', name: 'Aviso de oportunidad', active: true, tags: ['comercial', 'platia'], updated_at: null },
+            { id: 'b2', name: 'Aviso de oportunidad', active: true, launchable: true, tags: ['comercial', 'platia'], updated_at: null },
             { id: 'a1', name: 'Buzón de pliegos', active: false, tags: [], updated_at: null },
           ],
           pagination: PAGE,

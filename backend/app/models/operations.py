@@ -546,3 +546,34 @@ class ChatMessage(BusinessMixin, db.Model):
     meta: Mapped[dict | None] = mapped_column(JSON)
 
     conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
+
+
+# ---------------------------------------------------------------- Portal Low-Code (ADR-020)
+class AutomationRun(BusinessMixin, db.Model):
+    """Ejecución de un flujo de n8n lanzada desde PLATIA (fase L2).
+
+    Guarda una copia del id y del nombre del flujo, porque en n8n pueden cambiar o
+    desaparecer. ``created_by`` es quien la lanzó. No se modifica desde la API: solo la
+    tarea que llama a n8n y la respuesta de n8n cambian su estado.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "automation_runs"
+    __table_args__ = (
+        Index("ix_automation_runs_creator_created", "created_by", "created_at"),
+        Index("ix_automation_runs_status", "status"),
+    )
+
+    STATUSES = ("queued", "running", "succeeded", "failed")
+    OPEN = ("queued", "running")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workflow_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="queued", nullable=False)
+    input_data: Mapped[dict | None] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(String(500))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)

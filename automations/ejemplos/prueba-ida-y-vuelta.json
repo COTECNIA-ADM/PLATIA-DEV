@@ -1,0 +1,79 @@
+{
+  "id": "platiaPrueba0001",
+  "name": "PLATIA · Prueba de ida y vuelta",
+  "nodes": [
+    {
+      "id": "6f0f4c1e-0001-4a51-9a10-000000000001",
+      "name": "Webhook PLATIA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "6f0f4c1e-0001-4a51-9a10-0000000000a1",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "platia-prueba",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaWebhookKey",
+          "name": "PLATIA · clave del webhook"
+        }
+      }
+    },
+    {
+      "id": "6f0f4c1e-0002-4a51-9a10-000000000002",
+      "name": "Responder a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.body.callback_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'succeeded', result: { recibido: $json.body.input, ejecucion: $json.body.run_id, respondido_por: 'n8n' } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook PLATIA": {
+      "main": [
+        [
+          {
+            "node": "Responder a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagCatalog",
+      "name": "platia"
+    }
+  ]
+}

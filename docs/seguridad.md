@@ -67,6 +67,11 @@ que solo piden sesión. `test_security_tokens.py` prueba tokens manipulados (alg
 `none`, otra clave, `sub` cambiado, caducado, de refresco, usuario dado de baja) y
 `test_security_objects.py` que no se llega a datos de otra persona cambiando ids en la URL.
 
+Única ruta de negocio sin sesión de persona: `POST /api/automation/runs/<id>/callback`, por
+la que n8n devuelve el resultado de un flujo (ADR-020). Exige la clave de integración
+`N8N_CALLBACK_KEY` en `X-Platia-Integration-Key` (comparada en tiempo constante; sin clave
+configurada siempre da 401), tiene límite por IP y solo cierra una ejecución abierta, una vez.
+
 ## API de autenticación
 
 | Ruta | Qué hace |

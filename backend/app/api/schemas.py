@@ -649,3 +649,25 @@ class AnalyticsAskIn(Schema):
     months: int = Field(default=12, ge=1, le=36)
     service_line: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
     sector: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+
+
+# ---------------------------------------------------------------- Portal Low-Code (ADR-020)
+InputValue = (Annotated[str, StringConstraints(max_length=2000)] | int | float | bool | None)
+InputKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64,
+                                            pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
+
+
+class AutomationRunIn(Schema):
+    """Lanzar un flujo: datos planos (clave → texto, número o sí/no), sin anidar."""
+
+    workflow_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64,
+                                                  pattern=r"^[A-Za-z0-9]+$")]
+    input: dict[InputKey, InputValue] = Field(default_factory=dict, max_length=30)
+
+
+class AutomationCallbackIn(Schema):
+    """Respuesta de n8n al terminar el flujo."""
+
+    status: Literal["succeeded", "failed"]
+    result: dict | None = None
+    error: Annotated[str, StringConstraints(max_length=500)] | None = None

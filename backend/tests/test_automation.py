@@ -59,7 +59,7 @@ def test_catalog_lists_tagged_workflows_without_their_insides(client, as_automat
     assert resp.status_code == 200
     body = resp.json
     assert [w["name"] for w in body["items"]] == ["Aviso de oportunidad", "buzón de pliegos"]
-    assert body["items"][0] == {"id": "b2", "name": "Aviso de oportunidad", "active": True,
+    assert body["items"][0] == {"id": "b2", "name": "Aviso de oportunidad", "active": True, "launchable": False,
                                 "tags": ["comercial", "platia"], "updated_at": "2026-11-10T09:00:00.000Z"}
     assert "no-debe-salir" not in resp.get_data(as_text=True)
     assert body["pagination"] == {"page": 1, "per_page": 20, "total": 2, "pages": 1}
