@@ -34,6 +34,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
 - Reconstruir búsqueda y RAG desde MySQL: `flask reindex`
 - Gateway LLM (ADR-019): `LLM_GATEWAY_ENABLED=true` y `LLM_GATEWAY_API_KEY` en `.env`, y levantar
   con `-f docker-compose.yml -f docker-compose.gateway.yml`; guía en `docs/despliegue.md`
+- n8n del portal Low-Code (ADR-020, solo desarrollo): `N8N_ENABLED=true` en `.env` y levantar con
+  `-f docker-compose.yml -f docker-compose.n8n.yml`; editor en http://localhost:5679; guía en `docs/despliegue.md`
 - Evaluar la IA con el modelo real (opcional, cuesta céntimos): `docker compose run --rm migrations flask eval-ai --max-usd 0.5`; guía en `docs/pruebas.md`
 
 ## Convenciones obligatorias

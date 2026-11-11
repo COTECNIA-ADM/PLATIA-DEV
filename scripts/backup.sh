@@ -8,6 +8,7 @@
 #   mysql.sql.gz      los tres esquemas (volcado coherente, sin parar la plataforma)
 #   documents.tgz     los ficheros subidos
 #   env               el .env (sin él no se pueden descifrar los secretos MFA)
+#   n8n.tgz           con N8N_ENABLED=true, los flujos y credenciales de n8n (ADR-020)
 # Qdrant y Meilisearch no se copian: se regeneran desde MySQL con `flask reindex`.
 # Borra las copias de más de BACKUP_KEEP_DAYS días (14 por defecto).
 #
@@ -18,6 +19,8 @@ cd "$(dirname "$0")/.."
 
 COMPOSE=(docker compose -f docker-compose.yml)
 [ "${1:-}" = "--prod" ] && COMPOSE+=(-f docker-compose.prod.yml)
+N8N=false
+grep -qs '^N8N_ENABLED=true' .env && { N8N=true; COMPOSE+=(-f docker-compose.n8n.yml); }
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 
 umask 077
@@ -31,6 +34,12 @@ echo "Base de datos..."
 
 echo "Documentos..."
 "${COMPOSE[@]}" exec -T backend tar czf - -C /data/documents . > "$dest/documents.tgz"
+
+if [ "$N8N" = true ]; then
+  echo "n8n..."
+  "${COMPOSE[@]}" exec -T n8n tar czf - -C /home/node/.n8n . > "$dest/n8n.tgz"
+  gzip -t "$dest/n8n.tgz"
+fi
 
 cp .env "$dest/env"
 
