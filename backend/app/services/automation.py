@@ -4,6 +4,11 @@ Fase L1: el catálogo se lee de la API pública de n8n y solo enseña los flujos
 etiqueta ``N8N_CATALOG_TAG``. Si n8n no responde, el portal sigue funcionando y dice por
 qué no hay catálogo; el detalle del fallo va al log.
 
+Fase L3: la etiqueta ya no publica. Los flujos con la etiqueta son candidatos para el
+taller; quien construye les prepara una ficha (título, descripción y campos), pasa las
+comprobaciones de ``automation_checks`` y quien administra la publica. Las personas solo
+ven las fichas publicadas.
+
 Fase L2: una persona lanza un flujo del catálogo. PLATIA guarda la ejecución, la tarea
 ``tasks.automation.run`` llama al webhook del flujo con la clave del webhook y una firma
 HMAC, y n8n devuelve el resultado a ``/api/automation/runs/<id>/callback`` con la clave de
@@ -12,6 +17,7 @@ integración. Un flujo se puede lanzar si está activo y empieza por un nodo Web
 import hashlib
 import hmac
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -23,10 +29,12 @@ from flask import current_app
 from ..api.common import iso
 from ..errors import BusinessRuleError, ConflictError, NotFoundError, ValidationError
 from ..extensions import db
-from ..models import AutomationRun, utcnow
+from ..models import AutomationEntry, AutomationRun, utcnow
+from . import automation_checks as checks
 
 log = structlog.get_logger(__name__)
 
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 MAX_PAGES = 10  # 10 páginas de 100 flujos: de sobra para un catálogo interno
 
 
@@ -146,27 +154,201 @@ def _json_size(value) -> int:
     return len(json.dumps(value, ensure_ascii=False, default=str).encode())
 
 
-def launch(workflow_id: str, input_data: dict, user_id: int) -> AutomationRun:
-    """Comprueba que el flujo se puede lanzar y guarda la ejecución en cola.
+def validate_input(fields: list[dict], data: dict) -> dict:
+    """Comprueba los datos contra los campos de la ficha y devuelve los valores limpios."""
+    by_name = {f["name"]: f for f in fields}
+    unknown = sorted(set(data) - set(by_name))
+    if unknown:
+        raise ValidationError(f"La automatización no pide estos datos: {', '.join(unknown)}.")
+    clean: dict = {}
+    for field_def in fields:
+        name, kind = field_def["name"], field_def["type"]
+        value = data.get(name)
+        if value is None or value == "":
+            if field_def.get("required") and kind != "boolean":
+                raise ValidationError(f"Falta «{field_def['label']}».")
+            if kind == "boolean":
+                clean[name] = False
+            continue
+        if kind == "boolean":
+            if not isinstance(value, bool):
+                raise ValidationError(f"«{field_def['label']}» debe ser sí o no.")
+        elif kind == "number":
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise ValidationError(f"«{field_def['label']}» debe ser un número.")
+        else:
+            if not isinstance(value, str):
+                raise ValidationError(f"«{field_def['label']}» debe ser texto.")
+            value = value.strip()
+            limit = 2000 if kind == "textarea" else 300
+            if len(value) > limit:
+                raise ValidationError(f"«{field_def['label']}» es demasiado largo.")
+            if kind == "date" and not DATE.fullmatch(value):
+                raise ValidationError(f"«{field_def['label']}» debe ser una fecha (AAAA-MM-DD).")
+            if kind == "select" and value not in (field_def.get("options") or []):
+                raise ValidationError(f"«{field_def['label']}» no admite ese valor.")
+            if field_def.get("required") and not value:
+                raise ValidationError(f"Falta «{field_def['label']}».")
+        clean[name] = value
+    if _json_size(clean) > current_app.config["AUTOMATION_MAX_INPUT_BYTES"]:
+        raise ValidationError("Los datos de entrada son demasiado grandes.")
+    return clean
+
+
+def launch(entry: AutomationEntry, input_data: dict, user_id: int) -> AutomationRun:
+    """Comprueba que la ficha publicada se puede lanzar y guarda la ejecución en cola.
 
     No hace commit: lo hace la ruta, y después encola la tarea."""
-    if _json_size(input_data) > current_app.config["AUTOMATION_MAX_INPUT_BYTES"]:
-        raise ValidationError("Los datos de entrada son demasiado grandes.")
+    if entry.status != "published":
+        raise NotFoundError("Esa automatización no está publicada.")
+    clean = validate_input(entry.fields or [], input_data)
     try:
-        raw = fetch_workflow(workflow_id)
+        raw = fetch_workflow(entry.workflow_id)
     except N8nUnavailable as exc:
         log.warning("automation_launch_n8n_unavailable", error=str(exc))
         raise BusinessRuleError("No se puede conectar con n8n ahora mismo. Inténtalo más tarde.") from exc
     if raw is None:
-        raise NotFoundError("Ese flujo no está en el catálogo.")
+        raise BusinessRuleError("El flujo de esta automatización ya no está en n8n.")
     if not raw.get("active"):
         raise BusinessRuleError("El flujo está desactivado en n8n.")
     if webhook_path(raw) is None:
         raise BusinessRuleError("El flujo no se puede lanzar desde PLATIA: no empieza por un Webhook POST.")
-    run = AutomationRun(workflow_id=str(raw["id"]), workflow_name=(raw.get("name") or "Sin nombre")[:255],
-                        status="queued", input_data=input_data, created_by=user_id)
+    run = AutomationRun(entry_id=entry.id, workflow_id=entry.workflow_id, workflow_name=entry.title[:255],
+                        status="queued", input_data=clean, created_by=user_id)
     db.session.add(run)
     return run
+
+
+# ---------------------------------------------------------------- Catálogo propio (fase L3)
+def published_catalog(q: str = "", category: str = "") -> tuple[list[dict], Catalog]:
+    """Fichas publicadas, con el estado del flujo en n8n (activo, se puede lanzar)."""
+    stmt = AutomationEntry.select_active().where(AutomationEntry.status == "published")
+    if category in AutomationEntry.CATEGORIES:
+        stmt = stmt.where(AutomationEntry.category == category)
+    entries = db.session.scalars(stmt.order_by(AutomationEntry.title)).all()
+    if q:
+        needle = q.lower()
+        entries = [e for e in entries if needle in e.title.lower() or needle in (e.description or "").lower()]
+    source = fetch_catalog()
+    live = {w["id"]: w for w in source.workflows}
+    items = []
+    for e in entries:
+        w = live.get(e.workflow_id)
+        items.append({**entry_public(e), "active": bool(w and w["active"]),
+                      "launchable": bool(w and w["launchable"]), "updated_at": iso(e.published_at)})
+    return items, source
+
+
+def entry_public(e: AutomationEntry) -> dict:
+    return {"id": e.id, "title": e.title, "description": e.description, "category": e.category,
+            "fields": e.fields or []}
+
+
+def entry_dict(e: AutomationEntry) -> dict:
+    return {
+        **entry_public(e),
+        "workflow_id": e.workflow_id,
+        "status": e.status,
+        "checks": e.checks or [],
+        "checked_at": iso(e.checked_at),
+        "submitted_by": e.submitted_by,
+        "submitted_at": iso(e.submitted_at),
+        "reviewed_by": e.reviewed_by,
+        "reviewed_at": iso(e.reviewed_at),
+        "review_note": e.review_note,
+        "published_at": iso(e.published_at),
+        "created_by": e.created_by,
+        "created_at": iso(e.created_at),
+        "version": e.row_version,
+    }
+
+
+def _workflow_or_error(workflow_id: str) -> dict:
+    try:
+        raw = fetch_workflow(workflow_id)
+    except N8nUnavailable as exc:
+        log.warning("automation_workshop_n8n_unavailable", error=str(exc))
+        raise BusinessRuleError("No se puede conectar con n8n ahora mismo. Inténtalo más tarde.") from exc
+    if raw is None:
+        raise BusinessRuleError("Ese flujo no está en n8n o no lleva la etiqueta del catálogo.")
+    return raw
+
+
+def create_entry(data: dict, user_id: int) -> AutomationEntry:
+    raw = _workflow_or_error(data["workflow_id"])
+    taken = db.session.scalar(AutomationEntry.select_active().where(
+        AutomationEntry.workflow_id == str(raw["id"]), AutomationEntry.status != "retired"))
+    if taken is not None:
+        raise ConflictError("Ese flujo ya tiene una ficha en el catálogo.", entry_id=taken.id)
+    entry = AutomationEntry(workflow_id=str(raw["id"]), title=data["title"], description=data.get("description"),
+                            category=data.get("category") or "ciclo_comercial", fields=data.get("fields") or [],
+                            status="draft", created_by=user_id)
+    db.session.add(entry)
+    return entry
+
+
+EDITABLE = ("draft", "retired")
+
+
+def update_entry(entry: AutomationEntry, changes: dict) -> None:
+    if entry.status not in EDITABLE:
+        raise BusinessRuleError("Solo se edita una ficha en borrador o retirada.")
+    for key, value in changes.items():
+        setattr(entry, key, value)
+    entry.status = "draft"
+    entry.checks = None
+    entry.checked_at = None
+
+
+def workflow_inputs(entry: AutomationEntry) -> list[str] | None:
+    """Datos que usa el flujo, para proponer los campos. None si n8n no responde."""
+    try:
+        raw = fetch_workflow(entry.workflow_id)
+    except N8nUnavailable:
+        return None
+    return checks.input_names(raw) if raw else None
+
+
+def check_entry(entry: AutomationEntry) -> list[dict]:
+    raw = _workflow_or_error(entry.workflow_id)
+    issues = checks.run_checks(raw, entry.fields or [])
+    entry.set_system_fields(checks=issues, checked_at=utcnow())
+    return issues
+
+
+def submit_entry(entry: AutomationEntry, user_id: int) -> list[dict]:
+    if entry.status != "draft":
+        raise BusinessRuleError("Solo se envía a revisión una ficha en borrador.")
+    issues = check_entry(entry)
+    if checks.has_errors(issues):
+        raise BusinessRuleError("La ficha no pasa las comprobaciones: corrige los errores antes de enviarla.")
+    entry.status = "in_review"
+    entry.submitted_by = user_id
+    entry.submitted_at = utcnow()
+    entry.review_note = None
+    return issues
+
+
+def review_entry(entry: AutomationEntry, approve: bool, note: str | None, user_id: int) -> None:
+    if entry.status != "in_review":
+        raise BusinessRuleError("La ficha no está pendiente de revisión.")
+    entry.reviewed_by = user_id
+    entry.reviewed_at = utcnow()
+    entry.review_note = note
+    if not approve:
+        entry.status = "draft"
+        return
+    # El flujo puede haber cambiado en n8n desde que se envió: se vuelve a comprobar
+    if checks.has_errors(check_entry(entry)):
+        raise BusinessRuleError("El flujo ya no pasa las comprobaciones: devuelve la ficha a borrador.")
+    entry.status = "published"
+    entry.published_at = utcnow()
+
+
+def retire_entry(entry: AutomationEntry) -> None:
+    if entry.status != "published":
+        raise BusinessRuleError("Solo se retira una ficha publicada.")
+    entry.status = "retired"
 
 
 def sign(body: bytes, secret: str, timestamp: int | None = None) -> str:
@@ -268,6 +450,7 @@ def run_dict(run: AutomationRun, *, full: bool = False) -> dict:
         "workflow_id": run.workflow_id,
         "workflow_name": run.workflow_name,
         "status": run.status,
+        "entry_id": run.entry_id,
         "error": run.error,
         "requested_by": run.created_by,
         "created_at": iso(run.created_at),

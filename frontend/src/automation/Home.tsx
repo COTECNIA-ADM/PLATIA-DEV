@@ -37,14 +37,21 @@ export default function Home() {
           <SourceNotice source={data} />
           <div className="stats">
             <Stat label="Motor" value={data.reachable ? 'Conectado' : 'Sin conexión'} />
-            <Stat label="Publicadas" value={data.published} hint="Flujos del catálogo" />
-            <Stat label="Activas" value={data.active} hint="Con su disparador encendido" />
+            <Stat label="Publicadas" value={data.published} hint="En el catálogo" />
+            <Stat label="Activas" value={data.active} hint="Con su flujo encendido en n8n" />
+            {data.candidates !== null && <Stat label="Flujos en n8n" value={data.candidates} hint="Con la etiqueta del catálogo" />}
           </div>
           <section className="card">
             <h2>Qué puedes hacer</h2>
             <p>
-              Consulta las automatizaciones disponibles en el <Link to="/catalog">catálogo</Link>. Lanzarlas desde aquí y
-              ver tus ejecuciones llegará en la siguiente fase.
+              Lanza una automatización desde el <Link to="/catalog">catálogo</Link> y sigue cómo va en{' '}
+              <Link to="/runs">Ejecuciones</Link>.
+              {can('automations', 'build') && (
+                <>
+                  {' '}
+                  Prepara y envía a revisión las fichas de tus flujos en el <Link to="/workshop">Taller</Link>.
+                </>
+              )}
             </p>
           </section>
         </>

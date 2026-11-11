@@ -1,6 +1,6 @@
 // Piezas comunes del portal Low-Code.
 import { Badge, type Tone } from '../components/ui'
-import type { RunStatus, Source } from './types'
+import type { Category, EntryStatus, FieldType, RunStatus, Source } from './types'
 
 /** Aviso cuando n8n no está activado o no responde: el portal sigue funcionando. */
 export function SourceNotice({ source }: { source: Source }) {
@@ -44,4 +44,31 @@ export function DataTable({ data, empty }: { data: Record<string, unknown> | nul
       </table>
     </div>
   )
+}
+
+export const CATEGORY: Record<Category, string> = {
+  ciclo_comercial: 'Ciclo comercial',
+  back_office: 'Back-office',
+  plataforma: 'Plataforma',
+}
+
+export const ENTRY_STATUS: Record<EntryStatus, { label: string; tone: Tone }> = {
+  draft: { label: 'Borrador', tone: 'neutral' },
+  in_review: { label: 'En revisión', tone: 'warning' },
+  published: { label: 'Publicada', tone: 'success' },
+  retired: { label: 'Retirada', tone: 'neutral' },
+}
+
+export function EntryStatusBadge({ status }: { status: EntryStatus }) {
+  const s = ENTRY_STATUS[status] ?? { label: status, tone: 'neutral' as Tone }
+  return <Badge tone={s.tone}>{s.label}</Badge>
+}
+
+export const FIELD_TYPE: Record<FieldType, string> = {
+  text: 'Texto',
+  textarea: 'Texto largo',
+  number: 'Número',
+  boolean: 'Sí / no',
+  date: 'Fecha',
+  select: 'Lista',
 }

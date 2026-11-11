@@ -1,6 +1,6 @@
 # ADR-020: Portal Low-Code con n8n como motor de automatizaciones
 
-**Fecha:** 2026-11-07 · **Estado:** Aceptado (fases L0 a L2)
+**Fecha:** 2026-11-07 · **Estado:** Aceptado (fases L0 a L3)
 
 ## Contexto
 El ciclo comercial tiene tareas en sus extremos que hoy se hacen a mano o no se hacen:
@@ -67,8 +67,27 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
   contesta en `AUTOMATION_RUN_TIMEOUT_MINUTES`.
 - Cada persona ve sus ejecuciones; `automations.manage`, todas. La ruta del webhook nunca
   sale de PLATIA: el catálogo solo dice si el flujo se puede lanzar (`launchable`).
-- Se aplaza a L3 el catálogo propio en BD (descripción y campos de entrada de cada flujo):
-  mientras, el catálogo sigue saliendo de n8n y la entrada se escribe como pares clave-valor.
+
+**Taller y publicación (fase L3)**
+- Etiquetar un flujo en n8n ya no lo publica: lo hace candidato para el taller. El catálogo
+  que ven las personas sale de `operations_db.automation_entries`, una ficha por flujo con
+  título, descripción, área y los campos del formulario (texto, texto largo, número, sí/no,
+  fecha o lista). Al lanzar, PLATIA valida los datos contra esos campos.
+- La ficha pasa por borrador → en revisión → publicada (→ retirada). Quien construye
+  (`automations.build`) la prepara y la envía; quien administra (`automations.manage`) la
+  publica o la devuelve con una nota. Solo se edita en borrador o retirada, con bloqueo
+  optimista.
+- Comprobaciones (`app/services/automation_checks.py`) al enviar y otra vez al publicar,
+  porque el flujo puede haber cambiado en n8n: Webhook POST con «Header Auth», respuesta a
+  `callback_url` con la clave de integración, sin nodos prohibidos, sin nodos ni direcciones
+  de proveedores de IA (la IA va por PLATIA o el gateway) y sin claves escritas en los
+  nodos. Los avisos (flujo inactivo, sin flujo de errores, datos usados que la ficha no pide)
+  no bloquean. Nunca se devuelve el texto encontrado.
+- Las plantillas de `automations/` pasan las mismas comprobaciones en los tests. Las
+  primeras son P1 (aviso de oportunidad por correo) y P6 (recordatorio de plazo por correo):
+  si el correo falla, el flujo avisa a PLATIA y la ejecución queda fallida con el motivo.
+- No se exige que publique una persona distinta de la que construye: en instalaciones
+  pequeñas es la misma. Queda registrado quién envió y quién publicó.
 
 ## Alternativas descartadas
 - **Firmar solo con HMAC, sin clave en cabecera:** el nodo Webhook de n8n no sabe comprobar

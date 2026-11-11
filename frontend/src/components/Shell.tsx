@@ -7,7 +7,16 @@ import { APPS, userApps } from '../lib/apps'
 import { useAuth } from '../lib/auth'
 import BrandMark from './BrandMark'
 
-export type NavItem = { to: string; label: string; icon: string; module?: string; ai?: string; end?: boolean }
+export type NavItem = {
+  to: string
+  label: string
+  icon: string
+  module?: string
+  /** Acción del módulo que hace falta para ver la entrada (por defecto, read) */
+  action?: string
+  ai?: string
+  end?: boolean
+}
 
 export function initials(name: string | undefined) {
   return (name ?? '?')
@@ -47,7 +56,7 @@ export default function Shell({ nav, topbar }: { nav: NavItem[]; topbar?: ReactN
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => setMenuOpen(false), [location.pathname])
-  const items = nav.filter((n) => (!n.module || can(n.module, 'read')) && (!n.ai || hasAI(n.ai)))
+  const items = nav.filter((n) => (!n.module || can(n.module, n.action ?? 'read')) && (!n.ai || hasAI(n.ai)))
   const code = getAppCode()
 
   return (

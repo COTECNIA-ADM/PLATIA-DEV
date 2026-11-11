@@ -1,4 +1,4 @@
-"""Portal Low-Code (app automation, ADR-020): estado y catálogo leídos de n8n."""
+"""Portal Low-Code (app automation, ADR-020): estado y flujos candidatos leídos de n8n."""
 import pytest
 import requests
 
@@ -54,15 +54,15 @@ def as_automation(make_user, login):
     return _as
 
 
-def test_catalog_lists_tagged_workflows_without_their_insides(client, as_automation, n8n):
-    resp = client.get("/api/automation/catalog", headers=as_automation("user"))
+def test_workshop_lists_tagged_workflows_without_their_insides(client, as_automation, n8n):
+    resp = client.get("/api/automation/workflows", headers=as_automation("builder"))
     assert resp.status_code == 200
     body = resp.json
     assert [w["name"] for w in body["items"]] == ["Aviso de oportunidad", "buzón de pliegos"]
     assert body["items"][0] == {"id": "b2", "name": "Aviso de oportunidad", "active": True, "launchable": False,
-                                "tags": ["comercial", "platia"], "updated_at": "2026-11-10T09:00:00.000Z"}
+                                "tags": ["comercial", "platia"], "updated_at": "2026-11-10T09:00:00.000Z",
+                                "entry_id": None}
     assert "no-debe-salir" not in resp.get_data(as_text=True)
-    assert body["pagination"] == {"page": 1, "per_page": 20, "total": 2, "pages": 1}
     assert body["source"] == {"enabled": True, "reachable": True, "problem": None}
     call = n8n["calls"][0]
     assert call["url"] == "http://n8n:5678/api/v1/workflows"
@@ -71,20 +71,15 @@ def test_catalog_lists_tagged_workflows_without_their_insides(client, as_automat
     assert call["allow_redirects"] is False
 
 
-def test_catalog_filters_by_text_and_state(client, as_automation, n8n):
-    headers = as_automation("viewer")
-    assert [w["id"] for w in client.get("/api/automation/catalog?q=PLIEGOS", headers=headers).json["items"]] == ["a1"]
-    assert [w["id"] for w in client.get("/api/automation/catalog?q=comercial", headers=headers).json["items"]] == ["b2"]
-    assert [w["id"] for w in client.get("/api/automation/catalog?active=true", headers=headers).json["items"]] == ["b2"]
-    page2 = client.get("/api/automation/catalog?per_page=1&page=2", headers=headers).json
-    assert [w["id"] for w in page2["items"]] == ["a1"] and page2["pagination"]["pages"] == 2
+def test_only_builders_see_the_n8n_workflows(client, as_automation, n8n):
+    assert client.get("/api/automation/workflows", headers=as_automation("user")).status_code == 403
 
 
 def test_catalog_follows_the_cursor(client, as_automation, n8n):
     n8n["responses"] = [FakeResponse(body={"data": WORKFLOWS[:1], "nextCursor": "c2"}),
                         FakeResponse(body={"data": WORKFLOWS[1:], "nextCursor": None})]
-    resp = client.get("/api/automation/catalog", headers=as_automation("user"))
-    assert resp.json["pagination"]["total"] == 2
+    resp = client.get("/api/automation/workflows", headers=as_automation("builder"))
+    assert len(resp.json["items"]) == 2
     assert n8n["calls"][1]["params"]["cursor"] == "c2"
 
 
@@ -96,6 +91,9 @@ def test_catalog_follows_the_cursor(client, as_automation, n8n):
 def test_n8n_down_gives_an_empty_catalog_and_a_reason(client, as_automation, n8n, failure, problem):
     n8n["responses"] = [failure]
     resp = client.get("/api/automation/catalog", headers=as_automation("user"))
+    assert resp.status_code == 200
+    assert resp.json["source"] == {"enabled": True, "reachable": False, "problem": problem}
+    resp = client.get("/api/automation/workflows", headers=as_automation("builder"))
     assert resp.status_code == 200
     assert resp.json["items"] == []
     assert resp.json["source"] == {"enabled": True, "reachable": False, "problem": problem}
@@ -119,9 +117,10 @@ def test_status_gives_the_editor_link_only_to_builders(client, as_automation, n8
     user = client.get("/api/automation/status", headers=as_automation("user")).json
     builder = client.get("/api/automation/status", headers=as_automation("builder")).json
     admin = client.get("/api/automation/status", headers=as_automation("admin")).json
-    assert user == {"enabled": True, "reachable": True, "problem": None, "published": 2, "active": 1,
-                    "editor_url": None}
+    assert user == {"enabled": True, "reachable": True, "problem": None, "published": 0, "active": 0,
+                    "candidates": None, "editor_url": None}
     assert builder["editor_url"] == admin["editor_url"] == "http://localhost:5679/"
+    assert builder["candidates"] == 2
 
 
 def test_routes_only_exist_in_the_automation_app(client, make_user, login, n8n):

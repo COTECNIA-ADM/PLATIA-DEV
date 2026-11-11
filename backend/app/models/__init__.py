@@ -29,6 +29,7 @@ from .core import (
 from .operations import (
     AIAnalysis,
     Alert,
+    AutomationEntry,
     AutomationRun,
     ChatConversation,
     ChatMessage,

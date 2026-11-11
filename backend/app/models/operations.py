@@ -549,6 +549,37 @@ class ChatMessage(BusinessMixin, db.Model):
 
 
 # ---------------------------------------------------------------- Portal Low-Code (ADR-020)
+class AutomationEntry(VersionedMixin, BusinessMixin, db.Model):
+    """Ficha del catálogo del portal Low-Code (fase L3).
+
+    Une un flujo de n8n con lo que ve la persona que lo lanza: título, descripción y los
+    campos del formulario. Quien construye la prepara (``draft``), la envía a revisión
+    (``in_review``) y quien administra la publica (``published``) tras las comprobaciones.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "automation_entries"
+
+    STATUSES = ("draft", "in_review", "published", "retired")
+    CATEGORIES = ("ciclo_comercial", "back_office", "plataforma")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(30), default="ciclo_comercial", nullable=False)
+    fields: Mapped[list | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(12), default="draft", nullable=False, index=True)
+    checks: Mapped[list | None] = mapped_column(JSON)  # última revisión automática
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    submitted_by: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    review_note: Mapped[str | None] = mapped_column(String(1000))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class AutomationRun(BusinessMixin, db.Model):
     """Ejecución de un flujo de n8n lanzada desde PLATIA (fase L2).
 
@@ -568,6 +599,7 @@ class AutomationRun(BusinessMixin, db.Model):
     OPEN = ("queued", "running")
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_id: Mapped[int | None] = mapped_column(ForeignKey("automation_entries.id"), index=True)
     workflow_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     workflow_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(12), default="queued", nullable=False)

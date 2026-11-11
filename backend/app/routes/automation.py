@@ -4,7 +4,9 @@ Solo dentro de la app automation (``X-App-Code: automation``).
 
 - Estado de la conexión con n8n (``automations.read``); el enlace al editor solo se da a
   quien construye (``automations.build``).
-- Catálogo de solo lectura: los flujos de n8n con la etiqueta del catálogo.
+- Catálogo: las fichas publicadas, con el estado del flujo en n8n.
+- Taller (L3, ``automations.build``): flujos candidatos de n8n, fichas, comprobaciones y
+  envío a revisión; publicar, devolver y retirar, con ``automations.manage``.
 - Ejecuciones (L2): lanzar un flujo (``automations.run``) y seguirlo. Cada persona ve las
   suyas; ``automations.manage`` ve todas.
 - Respuesta de n8n (``/runs/<id>/callback``): sin sesión de persona, con la clave de
@@ -14,11 +16,12 @@ import hmac
 
 from flask import Blueprint, current_app, g, jsonify, request
 
-from ..api.common import MAX_SEARCH_LENGTH, page_args, paginate, parse_body
-from ..api.schemas import AutomationCallbackIn, AutomationRunIn
-from ..errors import ForbiddenError, NotFoundError
+from ..api.common import MAX_SEARCH_LENGTH, check_version, page_args, paginate, parse_body
+from ..api.schemas import (AutomationCallbackIn, AutomationEntryIn, AutomationEntryPatch, AutomationReviewIn,
+                           AutomationRunIn, Versioned)
+from ..errors import BusinessRuleError, ForbiddenError, NotFoundError
 from ..extensions import db
-from ..models import AuditAction, AutomationRun
+from ..models import AuditAction, AutomationEntry, AutomationRun
 from ..queue import enqueue
 from ..security.audit import audit
 from ..security.context import platform_guard, require_permission
@@ -53,12 +56,13 @@ def _source(catalog: service.Catalog) -> dict:
 @require_permission("automations", "read")
 @rate_limit("RATE_LIMIT_READ")
 def status():
-    catalog = service.fetch_catalog()
+    items, source = service.published_catalog()
     can_build = g.security.can("automations", "build")
     return jsonify({
-        **_source(catalog),
-        "published": len(catalog.workflows),
-        "active": sum(1 for w in catalog.workflows if w["active"]),
+        **_source(source),
+        "published": len(items),
+        "active": sum(1 for w in items if w["active"]),
+        "candidates": len(source.workflows) if can_build else None,
         "editor_url": service.editor_url() if can_build else None,
     })
 
@@ -70,10 +74,8 @@ def status():
 @rate_limit("RATE_LIMIT_READ")
 def catalog():
     page, per_page = page_args()
-    data = service.fetch_catalog()
-    items = data.workflows
-    if needle := (request.args.get("q") or "").strip()[:MAX_SEARCH_LENGTH].lower():
-        items = [w for w in items if needle in w["name"].lower() or any(needle in t.lower() for t in w["tags"])]
+    q = (request.args.get("q") or "").strip()[:MAX_SEARCH_LENGTH]
+    items, source = service.published_catalog(q, request.args.get("category") or "")
     if request.args.get("active") in ("true", "false"):
         items = [w for w in items if w["active"] == (request.args["active"] == "true")]
     total = len(items)
@@ -82,8 +84,150 @@ def catalog():
         "items": items[start:start + per_page],
         "pagination": {"page": page, "per_page": per_page, "total": total,
                        "pages": (total + per_page - 1) // per_page},
-        "source": _source(data),
+        "source": _source(source),
     })
+
+
+# ---------------------------------------------------------------- Taller (fase L3)
+def _get_entry(entry_id: int) -> AutomationEntry:
+    entry = db.session.scalar(AutomationEntry.select_active().where(AutomationEntry.id == entry_id))
+    if entry is None:
+        raise NotFoundError("Ficha no encontrada.")
+    return entry
+
+
+def _audit_entry(entry: AutomationEntry, audit_action: str, **details) -> None:
+    audit(audit_action, user_id=g.security.user_id, resource_type="automation_entry", resource_id=entry.id,
+          details={"workflow_id": entry.workflow_id, "status": entry.status, **details})
+
+
+@automation_bp.get("/workflows")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_READ")
+def workflows():
+    """Flujos de n8n con la etiqueta del catálogo, con la ficha que ya tengan."""
+    data = service.fetch_catalog()
+    taken = {e.workflow_id: e for e in db.session.scalars(
+        AutomationEntry.select_active().where(AutomationEntry.status != "retired"))}
+    items = [{**w, "entry_id": taken[w["id"]].id if w["id"] in taken else None} for w in data.workflows]
+    return jsonify({"items": items, "source": _source(data)})
+
+
+@automation_bp.get("/entries")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_READ")
+def list_entries():
+    stmt = AutomationEntry.select_active()
+    if (status := request.args.get("status")) in AutomationEntry.STATUSES:
+        stmt = stmt.where(AutomationEntry.status == status)
+    return jsonify(paginate(stmt.order_by(AutomationEntry.updated_at.desc(), AutomationEntry.id.desc()),
+                            service.entry_dict))
+
+
+@automation_bp.post("/entries")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_WRITE")
+def create_entry():
+    data = parse_body(AutomationEntryIn).model_dump()
+    entry = service.create_entry(data, g.security.user_id)
+    db.session.commit()
+    _audit_entry(entry, AuditAction.RECORD_CREATED)
+    return jsonify(service.entry_dict(entry)), 201
+
+
+@automation_bp.get("/entries/<int:entry_id>")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_READ")
+def get_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    return jsonify({**service.entry_dict(entry), "input_names": service.workflow_inputs(entry)})
+
+
+@automation_bp.patch("/entries/<int:entry_id>")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_WRITE")
+def update_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    data = parse_body(AutomationEntryPatch)
+    check_version(entry, data.version)
+    changes = data.model_dump(exclude_unset=True, exclude={"version"})
+    service.update_entry(entry, changes)
+    db.session.commit()
+    _audit_entry(entry, AuditAction.RECORD_UPDATED, fields=sorted(changes))
+    return jsonify(service.entry_dict(entry))
+
+
+@automation_bp.post("/entries/<int:entry_id>/check")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_WRITE")
+def check_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    service.check_entry(entry)
+    db.session.commit()
+    return jsonify(service.entry_dict(entry))
+
+
+@automation_bp.post("/entries/<int:entry_id>/submit")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_WRITE")
+def submit_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    check_version(entry, parse_body(Versioned).version)
+    try:
+        service.submit_entry(entry, g.security.user_id)
+    except BusinessRuleError:
+        db.session.commit()  # se guarda el resultado de las comprobaciones para enseñarlo
+        raise
+    db.session.commit()
+    _audit_entry(entry, AuditAction.RECORD_UPDATED, step="submit")
+    return jsonify(service.entry_dict(entry))
+
+
+@automation_bp.post("/entries/<int:entry_id>/review")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "manage")
+@rate_limit("RATE_LIMIT_WRITE")
+def review_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    data = parse_body(AutomationReviewIn)
+    check_version(entry, data.version)
+    try:
+        service.review_entry(entry, data.decision == "approve", data.note, g.security.user_id)
+    except BusinessRuleError:
+        db.session.rollback()
+        raise
+    db.session.commit()
+    _audit_entry(entry, AuditAction.RECORD_UPDATED, step=data.decision)
+    return jsonify(service.entry_dict(entry))
+
+
+@automation_bp.post("/entries/<int:entry_id>/retire")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "manage")
+@rate_limit("RATE_LIMIT_WRITE")
+def retire_entry(entry_id: int):
+    entry = _get_entry(entry_id)
+    check_version(entry, parse_body(Versioned).version)
+    service.retire_entry(entry)
+    db.session.commit()
+    _audit_entry(entry, AuditAction.RECORD_UPDATED, step="retire")
+    return jsonify(service.entry_dict(entry))
 
 
 # ---------------------------------------------------------------- Ejecuciones (fase L2)
@@ -110,7 +254,10 @@ def launch():
     from ..tasks.automation import run as run_task
 
     data = parse_body(AutomationRunIn)
-    run = service.launch(data.workflow_id, data.input, g.security.user_id)
+    entry = db.session.scalar(AutomationEntry.select_active().where(AutomationEntry.id == data.entry_id))
+    if entry is None:
+        raise NotFoundError("Esa automatización no está publicada.")
+    run = service.launch(entry, data.input, g.security.user_id)
     db.session.commit()
     audit(AuditAction.RECORD_CREATED, user_id=g.security.user_id, resource_type="automation_run",
           resource_id=run.id, details={"workflow_id": run.workflow_id})

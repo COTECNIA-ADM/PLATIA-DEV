@@ -230,15 +230,23 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    - «PLATIA · clave del webhook»: nombre `X-Platia-Webhook-Key`, valor `N8N_WEBHOOK_SECRET`.
    - «PLATIA · clave de integración»: nombre `X-Platia-Integration-Key`, valor `N8N_CALLBACK_KEY`.
 7. Importa `automations/ejemplos/prueba-ida-y-vuelta.json` (**Import from File**), asigna
-   esas dos credenciales a sus nodos, ponle la etiqueta `platia` y publícalo. En
-   *Automatizaciones → Catálogo* sale con el botón **Lanzar**; la ejecución aparece en
-   *Ejecuciones* y pasa a «Terminada» con los datos que le diste.
+   esas dos credenciales a sus nodos, ponle la etiqueta `platia` y publícalo.
+8. Desde la fase L3 la etiqueta ya no publica: en *Automatizaciones → Taller* (rol `builder`
+   o `admin`) pulsa **Nueva ficha**, elige el flujo, escribe título y descripción, añade los
+   campos que propone PLATIA y **Envía a revisión**. Quien tiene el rol `admin` la abre y
+   pulsa **Publicar**: solo entonces sale en el Catálogo con el botón **Lanzar**.
+9. Para las plantillas de `automations/plantillas/` (P1 aviso de oportunidad y P6
+   recordatorio de plazo) crea además una credencial **SMTP** llamada «PLATIA · correo SMTP»
+   y cambia el remitente del nodo «Enviar correo». Los campos de cada ficha están en
+   `automations/README.md`.
 
 Un flujo se puede lanzar desde PLATIA si está activo y empieza por un nodo **Webhook** con
 método POST y autenticación «Header Auth» con la clave del webhook. Recibe en el cuerpo
 `run_id`, `workflow_id`, `requested_by`, `input` y `callback_url`, y al terminar hace un POST
 a `callback_url` con la clave de integración y `{"status": "succeeded" | "failed", "result":
-{...}, "error": "..."}`. Las cabeceras traen además la firma `X-Platia-Signature:
+{...}, "error": "..."}`. Antes de publicar, PLATIA comprueba el flujo: Webhook POST con
+clave, respuesta a PLATIA con la clave de integración, sin nodos prohibidos, sin llamadas
+directas a proveedores de IA y sin claves escritas en los nodos. Las cabeceras traen además la firma `X-Platia-Signature:
 t=…,v1=…` (HMAC-SHA256 de `t.cuerpo` con `N8N_WEBHOOK_SECRET`). Si n8n no contesta en 6 horas
 (`AUTOMATION_RUN_TIMEOUT_MINUTES`), la ejecución se da por fallida.
 
