@@ -99,6 +99,15 @@ def _automation_settings(cfg, env=None) -> None:
     cfg.N8N_TIMEOUT_SECONDS = float(env.get("N8N_TIMEOUT_SECONDS", "5"))
     # Solo los flujos con esta etiqueta en n8n salen en el catálogo
     cfg.N8N_CATALOG_TAG = env.get("N8N_CATALOG_TAG", "platia").strip()
+    # Ejecuciones (fase L2): PLATIA llama al webhook del flujo y n8n responde a PLATIA
+    cfg.N8N_WEBHOOK_URL = env.get("N8N_WEBHOOK_URL", "http://n8n:5678/webhook").rstrip("/")
+    cfg.N8N_WEBHOOK_SECRET = env.get("N8N_WEBHOOK_SECRET", "")
+    cfg.N8N_CALLBACK_KEY = env.get("N8N_CALLBACK_KEY", "")
+    cfg.N8N_CALLBACK_BASE_URL = env.get("N8N_CALLBACK_BASE_URL", "http://backend:5000").rstrip("/")
+    # Una ejecución sin respuesta de n8n pasado este tiempo se da por fallida
+    cfg.AUTOMATION_RUN_TIMEOUT_MINUTES = int(env.get("AUTOMATION_RUN_TIMEOUT_MINUTES", "360"))
+    cfg.AUTOMATION_MAX_INPUT_BYTES = 8_000
+    cfg.AUTOMATION_MAX_RESULT_BYTES = 32_000
 
 
 def _business_settings(cfg, env=None) -> None:
@@ -294,7 +303,9 @@ class TestConfig:
                                 "SEARCH_SEMANTIC_RERANK": "true", "RATE_LIMIT_SEARCH": "500"})
         _email_settings(self, {})
         _automation_settings(self, {"N8N_ENABLED": "true", "N8N_API_KEY": "test-n8n-key",
-                                    "N8N_PUBLIC_URL": "http://localhost:5679/"})
+                                    "N8N_PUBLIC_URL": "http://localhost:5679/",
+                                    "N8N_WEBHOOK_SECRET": "test-webhook-secret",
+                                    "N8N_CALLBACK_KEY": "test-callback-key"})
         # Las tareas se ejecutan en línea, sin broker
         self.CELERY_BROKER_URL = "memory://"
         self.CELERY_ALWAYS_EAGER = True

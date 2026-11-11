@@ -223,6 +223,24 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    key**; pon la clave en `N8N_API_KEY` del `.env` y vuelve a levantar con las mismas capas.
    Da a las personas un rol en la app `automation` (Administración → Usuarios). En el
    catálogo solo salen los flujos con la etiqueta `platia` (`N8N_CATALOG_TAG`).
+6. Para lanzar flujos desde PLATIA (fase L2), `generate_env.py --actualizar` añade
+   `N8N_WEBHOOK_SECRET` y `N8N_CALLBACK_KEY`. Levanta con las mismas capas: la capa de n8n
+   añade el worker `celery_automation`, que es quien llama a n8n. En n8n crea dos
+   credenciales de tipo **Header Auth**:
+   - «PLATIA · clave del webhook»: nombre `X-Platia-Webhook-Key`, valor `N8N_WEBHOOK_SECRET`.
+   - «PLATIA · clave de integración»: nombre `X-Platia-Integration-Key`, valor `N8N_CALLBACK_KEY`.
+7. Importa `automations/ejemplos/prueba-ida-y-vuelta.json` (**Import from File**), asigna
+   esas dos credenciales a sus nodos, ponle la etiqueta `platia` y publícalo. En
+   *Automatizaciones → Catálogo* sale con el botón **Lanzar**; la ejecución aparece en
+   *Ejecuciones* y pasa a «Terminada» con los datos que le diste.
+
+Un flujo se puede lanzar desde PLATIA si está activo y empieza por un nodo **Webhook** con
+método POST y autenticación «Header Auth» con la clave del webhook. Recibe en el cuerpo
+`run_id`, `workflow_id`, `requested_by`, `input` y `callback_url`, y al terminar hace un POST
+a `callback_url` con la clave de integración y `{"status": "succeeded" | "failed", "result":
+{...}, "error": "..."}`. Las cabeceras traen además la firma `X-Platia-Signature:
+t=…,v1=…` (HMAC-SHA256 de `t.cuerpo` con `N8N_WEBHOOK_SECRET`). Si n8n no contesta en 6 horas
+(`AUTOMATION_RUN_TIMEOUT_MINUTES`), la ejecución se da por fallida.
 
 Los flujos y credenciales viven en el volumen `n8n_data`; `backup.sh` los guarda en
 `n8n.tgz` y `restore.sh` los devuelve. No pierdas `N8N_ENCRYPTION_KEY`: sin ella no se

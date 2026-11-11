@@ -20,8 +20,8 @@
 | 9b | Documentación | Manual de usuario, guía de incidencias, borrador de DPIA y comprobación automática de `docs/api.md` | 24 | Hecha |
 | L0 | n8n conectado | Capa `docker-compose.n8n.yml` con red propia, volumen, versión fijada y nodos peligrosos fuera; editor por el Nginx de PLATIA; copias (ADR-020) | — | Hecha |
 | L1 | Portal Low-Code | Aplicación `automation` del frontal: roles, inicio y catálogo de solo lectura leído de la API de n8n | — | Hecha |
-| L2 | Ejecutar y seguir | Catálogo y ejecuciones en BD, tarea en la cola `automation`, webhook firmado, clave de integración y primeros casos | — | Pendiente |
-| L3 | Taller y publicación | Plantillas versionadas en `automations/`, borradores y revisión con comprobaciones | — | Pendiente |
+| L2 | Ejecutar y seguir | Ejecuciones en BD, tarea en la cola `automation` con su worker, webhook con clave y firma, respuesta con clave de integración, pantallas de lanzar y seguir, y un flujo de ejemplo probado con n8n real | — | Hecha |
+| L3 | Taller y publicación | Plantillas versionadas en `automations/` con los primeros casos del catálogo, catálogo propio en BD (descripción y campos de entrada), borradores y revisión con comprobaciones | — | Pendiente |
 | L4 | Monitorización | Flujo de errores global, consumo de IA y segunda ola de casos | — | Pendiente |
 
 ## Del núcleo mínimo a los 17 servicios del libro

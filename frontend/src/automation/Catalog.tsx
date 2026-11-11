@@ -1,14 +1,19 @@
-// Catálogo del portal Low-Code: los flujos de n8n publicados para PLATIA (solo lectura).
+// Catálogo del portal Low-Code: los flujos de n8n publicados para PLATIA y el botón para lanzarlos.
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { fmtRelative } from '../lib/format'
 import { Badge, Empty, ErrorBox, Pager, Spinner, useDebounced } from '../components/ui'
 import { SourceNotice } from './common'
-import type { CatalogPage } from './types'
+import Launch from './Launch'
+import type { CatalogPage, Workflow } from './types'
 
 export default function Catalog() {
+  const { can } = useAuth()
+  const canRun = can('automations', 'run')
+  const [launching, setLaunching] = useState<Workflow | null>(null)
   const [params, setParams] = useSearchParams()
   const [text, setText] = useState(params.get('q') ?? '')
   const q = useDebounced(text.trim(), 300)
@@ -67,6 +72,7 @@ export default function Catalog() {
                 <th>Estado</th>
                 <th>Etiquetas</th>
                 <th>Actualizada</th>
+                {canRun && <th aria-label="Acciones" />}
               </tr>
             </thead>
             <tbody>
@@ -78,6 +84,19 @@ export default function Catalog() {
                   </td>
                   <td>{w.tags.join(', ') || '—'}</td>
                   <td>{fmtRelative(w.updated_at)}</td>
+                  {canRun && (
+                    <td>
+                      {w.launchable ? (
+                        <button className="btn btn-primary btn-small" onClick={() => setLaunching(w)}>
+                          Lanzar
+                        </button>
+                      ) : (
+                        <span className="muted" title="Necesita estar activa y empezar por un Webhook POST">
+                          No se puede lanzar
+                        </span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -94,6 +113,7 @@ export default function Catalog() {
           }}
         />
       )}
+      {launching && <Launch workflow={launching} onClose={() => setLaunching(null)} />}
     </div>
   )
 }

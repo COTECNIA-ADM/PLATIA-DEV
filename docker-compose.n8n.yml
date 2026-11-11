@@ -46,13 +46,27 @@ services:
     restart: unless-stopped
     networks: [automation_net]
 
-  # El backend lee el catálogo con la API pública de n8n (fase L1)
+  # El backend lee el catálogo con la API pública de n8n (fase L1) y recibe la respuesta
+  # de los flujos en /api/automation/runs/<id>/callback (fase L2)
   backend:
-    environment:
+    environment: &n8n-env
       N8N_ENABLED: ${N8N_ENABLED:-false}
       N8N_API_KEY: ${N8N_API_KEY:-}
       N8N_PUBLIC_URL: ${N8N_PUBLIC_URL:-http://localhost:5679/}
       N8N_CATALOG_TAG: ${N8N_CATALOG_TAG:-platia}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
+      N8N_CALLBACK_KEY: ${N8N_CALLBACK_KEY:-}
+    networks: [backend_net, data_net, automation_net]
+
+  # Worker de la cola automation (fase L2): llama a los webhooks de n8n. Solo existe con
+  # esta capa; sin ella no se lanza nada, porque el portal no deja lanzar sin n8n.
+  celery_automation:
+    extends:
+      file: docker-compose.yml
+      service: celery_default
+    command: ["celery", "-A", "celery_app", "worker", "-n", "automation@%h", "-Q", "automation", "-c", "2", "--loglevel=info"]
+    environment: *n8n-env
+    mem_limit: 512m
     networks: [backend_net, data_net, automation_net]
 
   nginx:
