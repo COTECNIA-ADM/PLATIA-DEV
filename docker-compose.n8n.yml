@@ -1,6 +1,6 @@
 # Motor de automatizaciones n8n para el portal Low-Code (ADR-020).
 #
-# n8n entra en una red propia (`automation_net`) que solo comparte con Nginx: no ve
+# n8n entra en una red propia (`automation_net`) que solo comparte con Nginx y el backend: no ve
 # MySQL, Redis, Qdrant ni Meilisearch (ADR-005). No publica puerto: el editor se sirve
 # por el Nginx de PLATIA en un puerto aparte (N8N_HTTP_PORT, 5679 por defecto), en la
 # raíz, porque n8n desaconseja servirlo en una subruta detrás de un proxy.
@@ -45,6 +45,15 @@ services:
     mem_limit: 1g
     restart: unless-stopped
     networks: [automation_net]
+
+  # El backend lee el catálogo con la API pública de n8n (fase L1)
+  backend:
+    environment:
+      N8N_ENABLED: ${N8N_ENABLED:-false}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      N8N_PUBLIC_URL: ${N8N_PUBLIC_URL:-http://localhost:5679/}
+      N8N_CATALOG_TAG: ${N8N_CATALOG_TAG:-platia}
+    networks: [backend_net, data_net, automation_net]
 
   nginx:
     ports:

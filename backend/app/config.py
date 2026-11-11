@@ -85,6 +85,20 @@ class Config:
         _ai_settings(self)
         _search_settings(self)
         _email_settings(self)
+        _automation_settings(self)
+
+
+def _automation_settings(cfg, env=None) -> None:
+    """Portal Low-Code con n8n (ADR-020). Sin N8N_ENABLED el portal se ve, pero vacío."""
+    env = os.environ if env is None else env
+    cfg.N8N_ENABLED = env.get("N8N_ENABLED", "false").strip().lower() == "true"
+    # API pública de n8n dentro de automation_net, y la URL del editor para el navegador
+    cfg.N8N_API_URL = env.get("N8N_API_URL", "http://n8n:5678/api/v1").rstrip("/")
+    cfg.N8N_API_KEY = env.get("N8N_API_KEY", "")
+    cfg.N8N_PUBLIC_URL = env.get("N8N_PUBLIC_URL", "").strip()
+    cfg.N8N_TIMEOUT_SECONDS = float(env.get("N8N_TIMEOUT_SECONDS", "5"))
+    # Solo los flujos con esta etiqueta en n8n salen en el catálogo
+    cfg.N8N_CATALOG_TAG = env.get("N8N_CATALOG_TAG", "platia").strip()
 
 
 def _business_settings(cfg, env=None) -> None:
@@ -279,6 +293,8 @@ class TestConfig:
         _search_settings(self, {"MEILI_URL": "http://meilisearch:7700", "MEILI_MASTER_KEY": "test-key",
                                 "SEARCH_SEMANTIC_RERANK": "true", "RATE_LIMIT_SEARCH": "500"})
         _email_settings(self, {})
+        _automation_settings(self, {"N8N_ENABLED": "true", "N8N_API_KEY": "test-n8n-key",
+                                    "N8N_PUBLIC_URL": "http://localhost:5679/"})
         # Las tareas se ejecutan en línea, sin broker
         self.CELERY_BROKER_URL = "memory://"
         self.CELERY_ALWAYS_EAGER = True

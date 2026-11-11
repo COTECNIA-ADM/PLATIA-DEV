@@ -38,6 +38,8 @@ def _app_for(path: str) -> str:
         return "admin"
     if path.startswith("/api/analytics/"):
         return "analytics"
+    if path.startswith("/api/automation/"):
+        return "automation"
     return "operations"
 
 
@@ -116,9 +118,9 @@ def test_garbage_token_is_401_everywhere(app, client):
 # ---------------------------------------------------------------- Denegación por defecto
 @pytest.fixture()
 def no_permissions(make_user, login):
-    """Persona con un rol vacío en las tres aplicaciones."""
+    """Persona con un rol vacío en las aplicaciones con frontal."""
     user = make_user("vacio@example.com")
-    for app_code in ("operations", "analytics", "admin"):
+    for app_code in ("operations", "analytics", "admin", "automation"):
         _role(app_code, "sin_permisos", {})
         _member(user.id, app_code, "sin_permisos")
     return login("vacio@example.com")

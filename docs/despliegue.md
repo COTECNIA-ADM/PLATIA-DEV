@@ -219,6 +219,10 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    `N8N_PUBLIC_URL` a la vez.
 3. `docker compose -f docker-compose.yml -f docker-compose.n8n.yml up -d`.
 4. Entra en http://localhost:5679 y crea la cuenta de propietario.
+5. Para el portal *Automatizaciones* de PLATIA: en n8n, **Settings → n8n API → Create an API
+   key**; pon la clave en `N8N_API_KEY` del `.env` y vuelve a levantar con las mismas capas.
+   Da a las personas un rol en la app `automation` (Administración → Usuarios). En el
+   catálogo solo salen los flujos con la etiqueta `platia` (`N8N_CATALOG_TAG`).
 
 Los flujos y credenciales viven en el volumen `n8n_data`; `backup.sh` los guarda en
 `n8n.tgz` y `restore.sh` los devuelve. No pierdas `N8N_ENCRYPTION_KEY`: sin ella no se

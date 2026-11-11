@@ -1,6 +1,6 @@
 // Las aplicaciones del frontal. Comparten código y sesión, pero cada una es un
 // build aparte con su propia ruta y su propia cabecera X-App-Code (ADR-014, fase 6b).
-export type AppCode = 'operations' | 'analytics' | 'admin'
+export type AppCode = 'operations' | 'analytics' | 'admin' | 'automation'
 
 export type AppInfo = { code: AppCode; name: string; path: string; tagline: string }
 
@@ -22,6 +22,12 @@ export const APPS: Record<AppCode, AppInfo> = {
     name: 'Administración',
     path: '/admin/',
     tagline: 'Usuarios, roles, modelos de IA, prompts y auditoría.',
+  },
+  automation: {
+    code: 'automation',
+    name: 'Automatizaciones',
+    path: '/automation/',
+    tagline: 'Portal Low-Code: automatizaciones con n8n.',
   },
 }
 

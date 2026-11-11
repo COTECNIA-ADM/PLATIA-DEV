@@ -107,8 +107,8 @@ Antes de diseñar algo nuevo, lee `docs/requisitos.md`, `docs/arquitectura.md` y
   Las importaciones de Excel comprueban primero (`dry_run`) y aplican todo o nada.
 
 ## Frontal (`frontend/`, ADR-014 y ADR-015)
-- Tres aplicaciones en un solo build: operaciones (`src/`), analítica (`src/analytics/`) y
-  administración (`src/admin/`). Cada una arranca con `mount(código, <App/>)`, que fija su
+- Cuatro aplicaciones en un solo build: operaciones (`src/`), analítica (`src/analytics/`),
+  administración (`src/admin/`) y automatizaciones (`src/automation/`, ADR-020). Cada una arranca con `mount(código, <App/>)`, que fija su
   `X-App-Code`; el menú va en `Shell` y el control de acceso en `AccessGate`.
 - Gráficos con `src/components/charts.tsx` (colores `--series-*` y `--seq-*`), siempre con vista de tabla.
 - Llamadas a la API solo con `src/lib/api.ts` (`api`, `download`, `stream`); datos con React Query.
