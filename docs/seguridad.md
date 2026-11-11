@@ -26,7 +26,7 @@ cabecera `X-App-Code` (por defecto `operations`).
 | analytics | admin, analyst, viewer |
 | admin | superadmin, admin, auditor |
 | security | security_admin, security_analyst, viewer |
-| automation | admin, builder, user, viewer (portal Low-Code, ADR-020) |
+| automation | admin (publica y retira fichas, ve todas las ejecuciones), builder (taller: prepara fichas y las envía a revisión), user (lanza), viewer (solo consulta) — portal Low-Code, ADR-020 |
 
 Los permisos de cada rol están en `backend/app/seeds.py` con la forma
 `{"módulo": ["acción", ...]}`. Lo que no aparece está denegado. Los roles marcados como

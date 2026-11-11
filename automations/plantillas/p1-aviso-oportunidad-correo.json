@@ -1,0 +1,150 @@
+{
+  "id": "platiaAvisoOpo01",
+  "name": "PLATIA · P1 Aviso de oportunidad por correo",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000001",
+      "name": "Webhook PLATIA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "a1b2c3d4-0000-4000-8000-0000000000a1",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "platia-aviso-oportunidad",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaWebhookKey",
+          "name": "PLATIA · clave del webhook"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000002",
+      "name": "Enviar correo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        300,
+        0
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "fromEmail": "avisos@tu-empresa.es",
+        "toEmail": "={{ $json.body.input.destinatario }}",
+        "subject": "=Oportunidad: {{ $json.body.input.titulo }}",
+        "emailFormat": "text",
+        "text": "=Hola:\n\nTe aviso de una oportunidad que puede interesarte.\n\nTítulo: {{ $json.body.input.titulo }}\nOrganismo: {{ $json.body.input.organismo || '—' }}\nImporte: {{ $json.body.input.importe ? $json.body.input.importe + ' €' : '—' }}\nPlazo de presentación: {{ $json.body.input.plazo || '—' }}\nEnlace: {{ $json.body.input.enlace || '—' }}\n\nAviso enviado desde PLATIA (ejecución {{ $json.body.run_id }}).",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "platiaCorreoSmtp",
+          "name": "PLATIA · correo SMTP"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000003",
+      "name": "Responder a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook PLATIA').item.json.body.callback_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'succeeded', result: { enviado_a: $('Webhook PLATIA').item.json.body.input.destinatario, asunto: 'Oportunidad: ' + $('Webhook PLATIA').item.json.body.input.titulo } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000004",
+      "name": "Avisar del fallo a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook PLATIA').item.json.body.callback_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'failed', error: 'No se ha podido enviar el correo: ' + ($json.error?.message || $json.error || 'error desconocido') }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook PLATIA": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo": {
+      "main": [
+        [
+          {
+            "node": "Responder a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar del fallo a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagCatalog",
+      "name": "platia"
+    }
+  ]
+}

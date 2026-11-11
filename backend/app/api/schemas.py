@@ -658,11 +658,67 @@ InputKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
 
 
 class AutomationRunIn(Schema):
-    """Lanzar un flujo: datos planos (clave → texto, número o sí/no), sin anidar."""
+    """Lanzar una automatización publicada: datos planos (clave → texto, número o sí/no)."""
 
+    entry_id: int = Field(ge=1)
+    input: dict[InputKey, InputValue] = Field(default_factory=dict, max_length=30)
+
+
+class AutomationField(Schema):
+    """Un campo del formulario con el que se lanza una automatización."""
+
+    name: InputKey
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    type: Literal["text", "textarea", "number", "boolean", "date", "select"] = "text"
+    required: bool = False
+    options: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]] = \
+        Field(default_factory=list, max_length=30)
+    help: Annotated[str, StringConstraints(max_length=200)] | None = None
+
+    @model_validator(mode="after")
+    def _options(self):
+        if self.type == "select" and not self.options:
+            raise ValueError("Una lista desplegable necesita opciones.")
+        if self.type != "select" and self.options:
+            raise ValueError("Solo las listas desplegables llevan opciones.")
+        return self
+
+
+AutomationFields = Annotated[list[AutomationField], Field(max_length=20)]
+AutomationCategory = Literal["ciclo_comercial", "back_office", "plataforma"]
+AutomationTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=200)]
+AutomationDescription = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None
+
+
+def _unique_fields(cls, fields):
+    if fields is not None and len({f.name for f in fields}) != len(fields):
+        raise ValueError("Hay dos campos con el mismo nombre.")
+    return fields
+
+
+class AutomationEntryIn(Schema):
     workflow_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64,
                                                   pattern=r"^[A-Za-z0-9]+$")]
-    input: dict[InputKey, InputValue] = Field(default_factory=dict, max_length=30)
+    title: AutomationTitle
+    description: AutomationDescription = None
+    category: AutomationCategory = "ciclo_comercial"
+    fields: AutomationFields = Field(default_factory=list)
+
+    _unique = field_validator("fields")(_unique_fields)
+
+
+class AutomationEntryPatch(Versioned):
+    title: AutomationTitle | None = None
+    description: AutomationDescription = None
+    category: AutomationCategory | None = None
+    fields: AutomationFields | None = None
+
+    _unique = field_validator("fields")(_unique_fields)
+
+
+class AutomationReviewIn(Versioned):
+    decision: Literal["approve", "reject"]
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] | None = None
 
 
 class AutomationCallbackIn(Schema):

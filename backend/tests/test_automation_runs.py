@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from app.extensions import db
-from app.models import AutomationRun, utcnow
+from app.models import AutomationEntry, AutomationRun, utcnow
 from app.services import automation as service
 from app.tasks import automation as tasks
 
@@ -71,8 +71,22 @@ def as_automation(make_user, login):
     return _as
 
 
-def _launch(client, headers, wid="w1", data=None):
-    return client.post("/api/automation/runs", headers=headers, json={"workflow_id": wid, "input": data or {}})
+FIELDS = [{"name": "cliente", "label": "Cliente", "type": "text", "required": True},
+          {"name": "importe", "label": "Importe", "type": "number"}]
+
+
+def publish(wid="w1", fields=None, status="published") -> int:
+    entry = AutomationEntry(workflow_id=wid, title=f"Ficha {wid}", status=status,
+                            fields=FIELDS if fields is None else fields, created_by=1)
+    db.session.add(entry)
+    db.session.commit()
+    return entry.id
+
+
+def _launch(client, headers, entry_id=None, data=None):
+    entry_id = entry_id or publish()
+    return client.post("/api/automation/runs", headers=headers,
+                       json={"entry_id": entry_id, "input": {"cliente": "Ayto. de Ejemplo"} if data is None else data})
 
 
 # ---------------------------------------------------------------- Lanzar
@@ -82,6 +96,7 @@ def test_launch_calls_the_signed_webhook_and_marks_it_running(client, as_automat
     run_id = resp.json["id"]
     assert resp.json["status"] == "running"
     assert resp.json["input"] == {"cliente": "Ayto. de Ejemplo", "importe": 1200}
+    assert resp.json["entry_id"] and resp.json["workflow_name"] == "Ficha w1"
 
     post = n8n["posts"][0]
     assert post["url"] == "http://n8n:5678/webhook/pliegos"
@@ -96,18 +111,23 @@ def test_launch_calls_the_signed_webhook_and_marks_it_running(client, as_automat
     assert hmac.compare_digest(mac, expected)
 
 
-def test_catalog_says_which_workflows_can_be_launched(client, as_automation, n8n):
+def test_catalog_says_which_entries_can_be_launched(client, as_automation, n8n):
     n8n["workflows"]["w2"] = workflow("w2", method="GET")
     n8n["workflows"]["w3"] = workflow("w3", active=False)
+    for wid in ("w1", "w2", "w3", "w4"):
+        publish(wid)
+    publish("w1", status="draft")
     items = client.get("/api/automation/catalog", headers=as_automation("viewer")).json["items"]
-    assert {w["id"]: w["launchable"] for w in items} == {"w1": True, "w2": False, "w3": False}
+    assert [(w["title"], w["launchable"]) for w in items] == [
+        ("Ficha w1", True), ("Ficha w2", False), ("Ficha w3", False), ("Ficha w4", False)]
+    assert items[0]["fields"] == FIELDS
     assert "pliegos" not in json.dumps(items)  # la ruta del webhook no sale de PLATIA
 
 
 @pytest.mark.parametrize("change, status", [
     ({"active": False}, 422),
     ({"method": "GET"}, 422),
-    ({"tags": ("otra",)}, 404),
+    ({"tags": ("otra",)}, 422),
 ])
 def test_only_published_active_webhook_workflows_can_be_launched(client, as_automation, n8n, change, status):
     n8n["workflows"]["w1"] = workflow(**change)
@@ -116,19 +136,40 @@ def test_only_published_active_webhook_workflows_can_be_launched(client, as_auto
     assert n8n["posts"] == []
 
 
-def test_unknown_workflow_is_404_and_bad_ids_are_rejected(client, as_automation, n8n):
+def test_only_published_entries_can_be_launched(client, as_automation, n8n):
     headers = as_automation("user")
-    assert _launch(client, headers, wid="nada").status_code == 404
-    assert _launch(client, headers, wid="../workflows").status_code == 422
+    assert _launch(client, headers, entry_id=999).status_code == 404
+    assert _launch(client, headers, entry_id=publish(status="draft")).status_code == 404
+    assert _launch(client, headers, entry_id=publish("nada")).status_code == 422
 
 
-def test_input_must_be_flat_and_small(client, as_automation, n8n):
+@pytest.mark.parametrize("data", [
+    {"anidado": {"a": 1}},
+    {"mala clave": "x"},
+    {"cliente": "x", "sobra": 1},
+    {"importe": 3},
+    {"cliente": "x", "importe": "mucho"},
+    {"cliente": "x" * 301},
+])
+def test_input_must_match_the_entry_fields(client, as_automation, n8n, data):
+    assert _launch(client, as_automation("user"), data=data).status_code == 422
+
+
+def test_input_types(client, as_automation, n8n):
+    fields = [{"name": "fecha", "label": "Fecha", "type": "date", "required": True},
+              {"name": "canal", "label": "Canal", "type": "select", "options": ["correo", "teams"]},
+              {"name": "urgente", "label": "Urgente", "type": "boolean"},
+              {"name": "nota", "label": "Nota", "type": "textarea"}]
+    entry_id = publish(fields=fields)
     headers = as_automation("user")
-    assert _launch(client, headers, data={"anidado": {"a": 1}}).status_code == 422
-    assert _launch(client, headers, data={"mala clave": "x"}).status_code == 422
-    assert _launch(client, headers, data={f"k{i}": "x" * 1999 for i in range(5)}).status_code == 422
+    ok = _launch(client, headers, entry_id, {"fecha": "2026-12-01", "canal": "teams", "nota": "x" * 1500})
+    assert ok.status_code == 202
+    assert ok.json["input"] == {"fecha": "2026-12-01", "canal": "teams", "urgente": False, "nota": "x" * 1500}
+    assert _launch(client, headers, entry_id, {"fecha": "mañana"}).status_code == 422
+    assert _launch(client, headers, entry_id, {"fecha": "2026-12-01", "canal": "fax"}).status_code == 422
+    assert _launch(client, headers, entry_id, {"fecha": "2026-12-01", "urgente": "sí"}).status_code == 422
     assert client.post("/api/automation/runs", headers=headers,
-                       json={"workflow_id": "w1", "extra": 1}).status_code == 422
+                       json={"entry_id": entry_id, "extra": 1}).status_code == 422
 
 
 def test_viewer_cannot_launch(client, as_automation, n8n):
