@@ -34,6 +34,8 @@ MODULES: dict[str, set[str]] = {
     "agents": {"read", "write"},  # Agent Studio (fase 5c)
     # --- security
     "guardrails": {"read"},
+    # --- automation (portal Low-Code, ADR-020)
+    "automations": {"read", "run", "build", "manage"},
 }
 
 # Módulos que tienen sentido en cada aplicación (para el editor de roles de Admin).
@@ -44,6 +46,7 @@ APP_MODULES: dict[str, tuple[str, ...]] = {
     "analytics": ("dashboards", "competitors", "reports", "copilot"),
     "admin": ("users", "roles", "llm_config", "prompts", "audit", "health", "tasks", "search", "agents"),
     "security": ("audit", "alerts", "guardrails"),
+    "automation": ("automations",),
 }
 
 # Clave especial: lista de módulos de IA, no acciones (Capítulo 6)

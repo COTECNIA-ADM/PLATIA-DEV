@@ -26,8 +26,8 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
 
 **Capa opcional, red propia y sin datos (fase L0)**
 - `docker-compose.n8n.yml` añade el servicio `n8n` (imagen con versión fijada) y lo pone
-  solo en `automation_net`, que comparte con Nginx. No está en `data_net`. El backend
-  entrará en esa red cuando empiece a llamar a n8n (fase L2).
+  solo en `automation_net`, que comparte con Nginx y, desde la fase L1, con el backend.
+  No está en `data_net`.
 - Sus datos van en el volumen `n8n_data` (SQLite) y `N8N_ENCRYPTION_KEY` sale del `.env`.
   `backup.sh` y `restore.sh` los copian cuando `N8N_ENABLED=true`.
 - n8n no publica puerto. El Nginx de PLATIA lo sirve en un puerto propio
@@ -43,6 +43,13 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
 **Solo desarrollo por ahora**
 - `deploy.sh` se niega a desplegar con `N8N_ENABLED=true`: en producción n8n llegará con
   HTTPS, su subdominio, cookie segura y acceso limitado.
+
+**Catálogo leído de n8n (fase L1)**
+- La app `automation` lee los flujos con la API pública de n8n (`N8N_API_KEY`) y solo
+  enseña los que llevan la etiqueta `N8N_CATALOG_TAG` (`platia`): etiquetar es publicar.
+  Del flujo solo salen id, nombre, estado, etiquetas y fecha; nunca nodos ni credenciales.
+- Si n8n está apagado o rechaza la clave, el portal responde igual y dice por qué; el
+  detalle va al log. El enlace al editor solo se da con `automations.build`.
 
 ## Alternativas descartadas
 - **Menú propio en n8n (formularios o chat de n8n) para todos:** cada persona necesitaría

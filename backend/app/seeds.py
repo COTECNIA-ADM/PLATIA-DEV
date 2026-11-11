@@ -21,6 +21,7 @@ APPS = [
     ("analytics", "Inteligencia de negocio", "Embudo, cuadros de mando y tendencias"),
     ("admin", "Administración", "Usuarios, roles, modelos de IA y prompts"),
     ("security", "Seguridad", "Auditoría y eventos de seguridad"),
+    ("automation", "Automatizaciones", "Portal Low-Code: catálogo y ejecuciones con n8n"),
 ]
 
 # Roles por aplicación (Capítulo 6). Permisos: {módulo: [acciones]}. Lo que no
@@ -75,6 +76,13 @@ ROLES = {
         "security_admin": ("Responsable de seguridad", True, {}),
         "security_analyst": ("Analista de seguridad", False, {"audit": R, "alerts": RW, "guardrails": R}),
         "viewer": ("Consulta", False, {"audit": R, "alerts": R}),
+    },
+    # Portal Low-Code (ADR-020): usar, construir y gobernar
+    "automation": {
+        "admin": ("Administrador de automatizaciones", True, {}),
+        "builder": ("Constructor", False, {"automations": ["read", "run", "build"]}),
+        "user": ("Usuario", False, {"automations": ["read", "run"]}),
+        "viewer": ("Consulta", False, {"automations": R}),
     },
 }
 
