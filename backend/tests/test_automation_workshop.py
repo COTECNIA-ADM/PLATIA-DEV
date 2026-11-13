@@ -92,10 +92,11 @@ def test_disabled_nodes_are_ignored():
 
 @pytest.mark.parametrize("path", sorted(TEMPLATES.rglob("*.json")), ids=lambda p: p.name)
 def test_repository_templates_pass_the_checks(path):
-    """Las de ``entradas/`` son flujos de entrada (caso P2) y la de ``errores/`` el flujo de errores
-    común (L4): entregan a PLATIA, no se lanzan. Todas las demás usan el flujo de errores."""
+    """Las de ``entradas/`` son flujos de entrada (P2, P8), la de ``errores/`` el flujo de errores
+    común (L4) y las de ``subflujos/`` la biblioteca común (P14): no se lanzan desde el catálogo.
+    Todas usan el flujo de errores."""
     raw = json.loads(path.read_text(encoding="utf-8"))
-    kind = {"entradas": "inbound", "errores": "error"}.get(path.parent.name, "launch")
+    kind = {"entradas": "inbound", "errores": "error", "subflujos": "subflow"}.get(path.parent.name, "launch")
     issues = checks.run_checks({**raw, "active": True}, kind=kind)
     assert [i for i in issues if i["level"] == "error"] == []
     assert "error_workflow" not in [i["code"] for i in issues]
@@ -269,3 +270,49 @@ def test_good_workflow_fixture_is_not_shared():
     a, b = good_workflow(), good_workflow()
     a["nodes"].pop()
     assert len(b["nodes"]) == 2 and copy.deepcopy(b) == b
+
+
+def _subflow_call(workflow_id: str, **inputs) -> dict:
+    return {"type": checks.EXECUTE_WORKFLOW, "name": "Subflujo",
+            "parameters": {"workflowId": {"__rl": True, "value": workflow_id, "mode": "id"},
+                           "workflowInputs": {"mappingMode": "defineBelow", "value": inputs}}}
+
+
+def test_subflows_count_as_delivery_and_reply():
+    """P14: entregar con «Entregar a PLATIA» y responder con «Responder a PLATIA» valen igual que
+    un HTTP Request propio; otro subflujo o una ruta que no es de entrada, no."""
+    raw = json.loads((TEMPLATES / "entradas" / "p8-licitaciones-ted.json").read_text(encoding="utf-8"))
+    raw["active"] = True
+    assert not checks.has_errors(checks.run_checks(raw, kind="inbound"))
+    deliver = next(n for n in raw["nodes"] if n["type"] == checks.EXECUTE_WORKFLOW)
+    deliver["parameters"]["workflowInputs"]["value"]["ruta"] = "/api/opportunities"
+    assert "inbound_target" in [i["code"] for i in checks.run_checks(raw, kind="inbound")]
+    deliver["parameters"]["workflowInputs"]["value"]["ruta"] = "/api/opportunities/inbound"
+    deliver["parameters"]["workflowId"]["value"] = checks.SUB_MAIL
+    assert "inbound_target" in [i["code"] for i in checks.run_checks(raw, kind="inbound")]
+
+    launch = {**good_workflow(), "active": True}
+    launch["nodes"] = [n for n in launch["nodes"] if "callback_url" not in str(n.get("parameters"))]
+    assert "callback" in [i["code"] for i in checks.run_checks(launch)]
+    launch["nodes"].append(_subflow_call(checks.SUB_REPLY, callback_url="={{ $json.body.callback_url }}",
+                                         estado="succeeded"))
+    assert "callback" not in [i["code"] for i in checks.run_checks(launch)]
+
+
+def test_subflow_checks():
+    raw = json.loads((TEMPLATES / "subflujos" / "platia-entregar.json").read_text(encoding="utf-8"))
+    assert [i["code"] for i in checks.run_checks(raw, kind="subflow")] == ["inactive"]
+    raw["active"] = True
+    assert checks.run_checks(raw, kind="subflow") == []
+    http = next(n for n in raw["nodes"] if n["type"] == checks.HTTP_REQUEST)
+    http["parameters"]["authentication"] = "none"
+    assert [i["code"] for i in checks.run_checks(raw, kind="subflow")] == ["inbound_auth"]
+    raw["nodes"] = [n for n in raw["nodes"] if n["type"] != checks.SUBFLOW_TRIGGER]
+    assert "subflow_trigger" in [i["code"] for i in checks.run_checks(raw, kind="subflow")]
+
+
+def test_delivery_subflow_only_accepts_inbound_routes():
+    """El subflujo «Entregar a PLATIA» solo llama a rutas ``/api/.../inbound`` del backend."""
+    raw = json.loads((TEMPLATES / "subflujos" / "platia-entregar.json").read_text(encoding="utf-8"))
+    url = next(n for n in raw["nodes"] if n["type"] == checks.HTTP_REQUEST)["parameters"]["url"]
+    assert url.startswith("=http://backend:5000{{") and "inbound$/" in url and "ruta-no-permitida" in url

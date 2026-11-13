@@ -8,10 +8,15 @@ Nunca se devuelve el texto encontrado (podría ser un secreto): solo el nodo y l
 
 Hay dos clases de flujo:
 - ``launch``: se lanza desde el catálogo; empieza por un Webhook y responde a ``callback_url``.
-- ``inbound``: recoge algo de fuera (por ejemplo, el formulario web del caso P2) y lo entrega en
-  ``/api/leads/inbound`` con la clave de integración. No pasa por el catálogo.
+- ``inbound``: recoge algo de fuera (el formulario web del caso P2, TED en el P8...) y lo entrega
+  en una ruta ``/inbound`` de PLATIA con la clave de integración. No pasa por el catálogo.
 - ``error``: el flujo de errores común (fase L4). Empieza por un Error Trigger y entrega el
   fallo en ``/api/automation/incidents/inbound`` con la clave de integración.
+- ``subflow``: un subflujo de la biblioteca común (caso P14, ``automations/subflujos/``). Empieza
+  por un «Execute Workflow Trigger» y, si llama a PLATIA, lo hace con la clave de integración.
+
+Entregar y responder a PLATIA se puede hacer con un HTTP Request propio o llamando al subflujo
+común (``Execute Workflow`` con su id): los dos cuentan.
 """
 import re
 
@@ -73,7 +78,14 @@ def input_names(raw: dict) -> list[str]:
     return sorted(names)
 
 
-INBOUND_PATH = "/api/leads/inbound"
+INBOUND_PATHS = ("/api/leads/inbound", "/api/opportunities/inbound")
+EXECUTE_WORKFLOW = "n8n-nodes-base.executeWorkflow"
+SUBFLOW_TRIGGER = "n8n-nodes-base.executeWorkflowTrigger"
+# Subflujos de la biblioteca común (automations/subflujos/)
+SUB_DELIVER = "platiaSubEntregar01"
+SUB_REPLY = "platiaSubResponder01"
+SUB_MAIL = "platiaSubCorreo01"
+PLATIA_URL_HINTS = ("backend:5000", "callback_url")
 INCIDENTS_PATH = "/api/automation/incidents/inbound"
 ERROR_TRIGGER = "n8n-nodes-base.errorTrigger"
 
@@ -82,17 +94,42 @@ def _header_auth(params: dict) -> bool:
     return params.get("authentication") == "genericCredentialType" and params.get("genericAuthType") == "httpHeaderAuth"
 
 
-def _inbound_checks(nodes: list[dict], path: str = INBOUND_PATH) -> list[dict]:
+def _calls_subflow(node: dict, workflow_id: str) -> bool:
+    if node.get("type") != EXECUTE_WORKFLOW:
+        return False
+    ref = (node.get("parameters") or {}).get("workflowId")
+    return (ref.get("value") if isinstance(ref, dict) else ref) == workflow_id
+
+
+def _inbound_checks(nodes: list[dict], paths: tuple[str, ...] = INBOUND_PATHS) -> list[dict]:
     issues = []
     targets = [n for n in nodes if n.get("type") == HTTP_REQUEST
-               and path in str((n.get("parameters") or {}).get("url") or "")]
-    if not targets:
+               and any(p in str((n.get("parameters") or {}).get("url") or "") for p in paths)]
+    via_subflow = [n for n in nodes if _calls_subflow(n, SUB_DELIVER)
+                   and any(p in text for text in _strings(n.get("parameters") or {}) for p in paths)]
+    if not targets and not via_subflow:
         issues.append(_issue("inbound_target", "error",
-                             f"El flujo no entrega nada a PLATIA: falta un HTTP Request a «{path}»."))
+                             "El flujo no entrega nada a PLATIA: falta un HTTP Request (o el subflujo «Entregar a "
+                             f"PLATIA») a «{' o '.join(paths)}»."))
     for node in targets:
         if not _header_auth(node.get("parameters") or {}):
             issues.append(_issue("inbound_auth", "error",
                                  "La entrega a PLATIA debe llevar la clave de integración («Header Auth»).",
+                                 node.get("name")))
+    return issues
+
+
+def _subflow_checks(nodes: list[dict]) -> list[dict]:
+    issues = []
+    if not any(n.get("type") == SUBFLOW_TRIGGER for n in nodes):
+        issues.append(_issue("subflow_trigger", "error",
+                             "Un subflujo debe empezar por un «Execute Workflow Trigger»."))
+    for node in nodes:
+        params = node.get("parameters") or {}
+        if node.get("type") == HTTP_REQUEST and any(h in str(params.get("url") or "") for h in PLATIA_URL_HINTS) \
+                and not _header_auth(params):
+            issues.append(_issue("inbound_auth", "error",
+                                 "La llamada a PLATIA debe llevar la clave de integración («Header Auth»).",
                                  node.get("name")))
     return issues
 
@@ -125,9 +162,10 @@ def _launch_checks(nodes: list[dict]) -> list[dict]:
                 issues.append(_issue("callback_auth", "error",
                                      "La respuesta a PLATIA debe llevar la clave de integración («Header Auth»).",
                                      node.get("name")))
-    if not callbacks:
+    if not callbacks and not any(_calls_subflow(n, SUB_REPLY) for n in nodes):
         issues.append(_issue("callback", "error",
-                             "El flujo no responde a PLATIA: falta un HTTP Request a «callback_url».",))
+                             "El flujo no responde a PLATIA: falta un HTTP Request a «callback_url» "
+                             "(o el subflujo «Responder a PLATIA»).",))
     return issues
 
 
@@ -136,9 +174,11 @@ def run_checks(raw: dict, fields: list[dict] | None = None, kind: str = "launch"
     if kind == "inbound":
         issues = _inbound_checks(nodes)
     elif kind == "error":
-        issues = _inbound_checks(nodes, INCIDENTS_PATH)
+        issues = _inbound_checks(nodes, (INCIDENTS_PATH,))
         if not any(n.get("type") == ERROR_TRIGGER for n in nodes):
             issues.append(_issue("error_trigger", "error", "El flujo de errores debe empezar por un «Error Trigger»."))
+    elif kind == "subflow":
+        issues = _subflow_checks(nodes)
     else:
         issues = _launch_checks(nodes)
 
@@ -159,8 +199,10 @@ def run_checks(raw: dict, fields: list[dict] | None = None, kind: str = "launch"
             issues.append(_issue("secret", "error",
                                  "Parece que hay una clave escrita en el nodo: guárdala en una credencial.", name))
 
-    if not raw.get("active"):
+    if not raw.get("active") and kind != "subflow":
         issues.append(_issue("inactive", "warning", "El flujo no está activo en n8n: no se podrá lanzar."))
+    if kind == "subflow" and not raw.get("active"):
+        issues.append(_issue("inactive", "warning", "El subflujo no está publicado en n8n: quien lo llame fallará."))
     if kind != "error" and not (raw.get("settings") or {}).get("errorWorkflow"):
         issues.append(_issue("error_workflow", "warning",
                              "El flujo no tiene flujo de errores: si falla, PLATIA se enterará por el plazo."))

@@ -1,6 +1,6 @@
 # ADR-020: Portal Low-Code con n8n como motor de automatizaciones
 
-**Fecha:** 2026-11-07 · **Estado:** Aceptado (fases L0 a L3)
+**Fecha:** 2026-11-07 · **Estado:** Aceptado (fases L0 a L4 y casos P1, P2, P6, P8, P14 y P18)
 
 ## Contexto
 El ciclo comercial tiene tareas en sus extremos que hoy se hacen a mano o no se hacen:
@@ -127,6 +127,53 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
 - Mientras n8n sea solo de desarrollo, el formulario no se publica en internet. Antes de
   hacerlo hará falta un captcha o un límite por IP delante: el acuse va a la dirección que
   escribe cualquiera.
+
+**Biblioteca de subflujos (caso P14)**
+- `automations/subflujos/` trae tres subflujos que empiezan por un «Execute Workflow Trigger»:
+  *Entregar a PLATIA* (`platiaSubEntregar01`: `ruta` y `cuerpo`; solo rutas `/api/.../inbound` del
+  backend, con la clave de integración y tres intentos), *Responder a PLATIA*
+  (`platiaSubResponder01`: `callback_url`, `estado`, `resultado`, `error`) y *Enviar correo*
+  (`platiaSubCorreo01`: `para`, `asunto`, `texto`). Así la clave y los reintentos están en un
+  solo sitio y un flujo nuevo no tiene que repetirlos.
+- Las comprobaciones del Taller aceptan, en lugar de un HTTP Request propio, una llamada a
+  *Responder a PLATIA* (flujos lanzables) o a *Entregar a PLATIA* con una ruta de entrada
+  (flujos de entrada). Los subflujos tienen su propia comprobación (`kind="subflow"`).
+- En n8n 2.x un subflujo solo se puede llamar si está publicado, y solo desde flujos del mismo
+  propietario (`callerPolicy`). Llevan la etiqueta `platia-subflujo`, no `platia`.
+
+**Oportunidades que entregan los flujos (casos P8 y P6)**
+- `POST /api/opportunities/inbound` recibe lotes de hasta 250 anuncios con la clave de
+  integración y hace lo mismo que la lectura de feeds ATOM (`upsert_from_feed`): crea en
+  `detected`, actualiza sin tocar el estado de trabajo y deduplica por fuente e identificador.
+  Solo admite las fuentes `ted` y `buzon_pliegos`. La puntuación, los avisos de relevancia y el
+  reparto los hace después la revisión horaria, igual que con los feeds.
+- **P8, TED.** El flujo consulta la API de búsqueda de TED (pública, sin clave) cada mañana con
+  paginación por iteración (`iterationNextToken`, 100 anuncios por página, 30 páginas como
+  mucho y un segundo entre páginas) y entrega cada página con el subflujo *Entregar a PLATIA*
+  en formato `ted`. La normalización (título en español si lo hay, poder adjudicador, CPV, plazo
+  más cercano en UTC, importe solo si es en euros, enlace al anuncio) está en PLATIA
+  (`services/inbound_opportunities.py`), con tests, y tolera campos que falten o cambien de forma.
+  País, prefijos CPV y días se cambian en el nodo «Preparar consulta».
+- **P6, buzón de pliegos.** Un «Email Trigger (IMAP)» lee los correos nuevos de un buzón propio
+  y crea una oportunidad por correo (`buzon_pliegos`, el id es el `Message-ID`). Los adjuntos de
+  tipos admitidos suben a `POST /api/opportunities/inbound/{id}/documents`: se guardan como
+  cualquier documento (tipo, firma y tamaño), se vinculan como `requirements` y se procesan.
+  Solo a una oportunidad de esa fuente aún en `detected`, hasta 20; un correo repetido no sube
+  nada. El flujo puede limitar los remitentes por dominio. Como cualquiera puede escribir al
+  buzón, la oportunidad queda en `detected` sin responsable hasta que una regla o una persona
+  la asigne, y sus documentos pasan los mismos controles que el resto antes de llegar a la IA.
+
+**Reparto de oportunidades (caso P18)**
+- Es una regla de negocio sobre datos de PLATIA, así que vive en PLATIA y no en n8n:
+  `operations_db.opportunity_routing_rules` (orden, activa, fuentes, líneas de servicio,
+  sectores, importe mínimo y máximo, días hasta el plazo y responsable). Un criterio vacío vale
+  para todas; si pide importe o plazo y la oportunidad no lo tiene, no encaja.
+- `tasks.alerts.proactive_scan` (cada hora), después de puntuar, aplica la primera regla activa
+  que encaje a las oportunidades recientes sin responsable en `detected` o `qualifying`: asigna,
+  lo anota en `extra_data["routing"]` y avisa a la persona. Nunca reasigna. Si la persona de la
+  regla está de baja, pasa a la siguiente.
+- Las reglas las gestiona quien tiene `opportunities.manage` (*Oportunidades → Reparto*); el
+  responsable debe poder escribir oportunidades en operaciones.
 
 ## Alternativas descartadas
 - **Firmar solo con HMAC, sin clave en cabecera:** el nodo Webhook de n8n no sabe comprobar

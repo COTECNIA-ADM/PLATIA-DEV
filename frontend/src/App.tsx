@@ -17,6 +17,7 @@ const ClientDetail = lazy(() => import('./pages/ClientDetail'))
 const Talent = lazy(() => import('./pages/Talent'))
 const ProfileDetail = lazy(() => import('./pages/ProfileDetail'))
 const Leads = lazy(() => import('./pages/Leads'))
+const RoutingRules = lazy(() => import('./pages/RoutingRules'))
 const LeadDetail = lazy(() => import('./pages/LeadDetail'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Search = lazy(() => import('./pages/Search'))
@@ -30,6 +31,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="opportunities" element={<Opportunities />} />
+          <Route path="opportunities/routing-rules" element={<RoutingRules />} />
           <Route path="opportunities/:id" element={<OpportunityDetail />} />
           <Route path="documents" element={<Documents />} />
           <Route path="documents/:id" element={<DocumentDetail />} />

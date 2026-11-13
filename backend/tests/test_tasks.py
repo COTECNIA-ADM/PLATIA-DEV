@@ -60,7 +60,7 @@ def test_feed_ingestion_dedupes_and_proactive_scan_alerts(seeded, make_user):
     assert opp.published_at.hour == 8  # normalizado a UTC
 
     result = alerts.proactive_scan.apply().get()
-    assert result == {"scored": 2, "alerts": 1}
+    assert result == {"scored": 2, "alerts": 1, "routed": 0}
     alert = db.session.scalar(db.select(Alert))
     assert alert.opportunity_id == opp.id and "Ciberseguridad" in alert.message
     note = db.session.scalar(db.select(Notification).filter_by(user_id=admin.id))

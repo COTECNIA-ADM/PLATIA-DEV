@@ -31,6 +31,7 @@ from .operations import (
     Alert,
     AutomationEntry,
     AutomationIncident,
+    OpportunityRoutingRule,
     AutomationRun,
     InboundLead,
     ChatConversation,

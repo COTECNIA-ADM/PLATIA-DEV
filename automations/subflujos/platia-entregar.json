@@ -1,0 +1,85 @@
+{
+  "id": "platiaSubEntregar01",
+  "name": "PLATIA · Subflujo · Entregar a PLATIA",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000101",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ruta"
+            },
+            {
+              "name": "cuerpo",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000102",
+      "name": "Entregar a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:5000{{ /^\\/api\\/[a-z0-9\\/_-]+\\/inbound$/.test($json.ruta) ? $json.ruta : '/api/ruta-no-permitida' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo || {}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Entregar a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagSubflujo",
+      "name": "platia-subflujo"
+    }
+  ]
+}

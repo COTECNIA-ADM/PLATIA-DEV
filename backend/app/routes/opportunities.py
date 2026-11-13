@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from ..api.common import (apply_changes, check_version, ensure_can_modify, get_active, iso,
                           like_pattern, money, paginate, parse_body, record_audit, to_utc_naive)
-from ..api.schemas import LinkDocument, OpportunityIn, OpportunityPatch, StatusChange
+from ..api.schemas import InboundOpportunitiesIn, LinkDocument, OpportunityIn, OpportunityPatch, StatusChange
 from ..errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from ..extensions import db
 from ..models import (AuditAction, Client, Document, Opportunity, OpportunityDocument, ServiceLine)
@@ -21,7 +21,9 @@ from ..ai.access import Viewer
 from ..errors import BusinessRuleError
 from ..queue import PRIORITY_SCHEDULED, PRIORITY_USER, enqueue
 from ..security.context import platform_guard, require_ai_module, require_permission
+from ..security.integration import integration_key_ok
 from ..security.ratelimit import rate_limit
+from ..services import inbound_opportunities
 from ..services import opportunities as service
 
 opportunities_bp = Blueprint("opportunities", __name__, url_prefix="/api/opportunities")
@@ -141,6 +143,47 @@ def _float_arg(name: str) -> float:
         return float(request.args[name])
     except ValueError as exc:
         raise ValidationError(f"{name} debe ser un número.") from exc
+
+
+@opportunities_bp.post("/inbound")
+@rate_limit("RATE_LIMIT_WRITE", scope="ip")
+def inbound():
+    """Lote de anuncios de un flujo de entrada de n8n (P8 TED, P6 buzón de pliegos). Sin sesión de
+    persona: clave de integración. Hace lo mismo que la lectura de feeds: crea en ``detected``,
+    actualiza sin tocar el estado de trabajo y deduplica por fuente e identificador."""
+    if not integration_key_ok():
+        return jsonify(error="Autenticación requerida."), 401
+    data = parse_body(InboundOpportunitiesIn)
+    result = inbound_opportunities.receive(data.source, data.format, data.items, data.workflow_id)
+    db.session.commit()
+    if result["created"]:
+        audit(AuditAction.RECORD_CREATED, resource_type="opportunity", details={
+            "source": data.source, "workflow_id": data.workflow_id, "created": result["created"]})
+    return jsonify(result), 201 if result["created"] else 200
+
+
+@opportunities_bp.post("/inbound/<int:opp_id>/documents")
+@rate_limit("RATE_LIMIT_UPLOAD", scope="ip")
+def inbound_document(opp_id: int):
+    """multipart/form-data: ``file``, ``source`` y ``title`` (opcional). Un adjunto del buzón de
+    pliegos (P6) para la oportunidad que acaba de crear el mismo flujo. Clave de integración."""
+    if not integration_key_ok():
+        return jsonify(error="Autenticación requerida."), 401
+    opp = db.session.get(Opportunity, opp_id)
+    if opp is None:
+        raise NotFoundError("Oportunidad no encontrada.")
+    document, created = inbound_opportunities.attach(opp, request.form.get("source") or "", request.files.get("file"),
+                                                     request.form.get("title"))
+    db.session.commit()
+    if created:
+        from ..tasks.documents import process_upload
+
+        document.celery_task_id = enqueue(process_upload, document.id, priority=PRIORITY_USER)
+        db.session.commit()
+        audit(AuditAction.DOCUMENT_UPLOADED, resource_type="documents", resource_id=document.id,
+              details={"size": document.file_size_bytes, "sha256": document.file_hash, "opportunity_id": opp.id})
+    return jsonify({"document_id": document.id, "opportunity_id": opp.id, "duplicate": not created}), \
+        201 if created else 200
 
 
 @opportunities_bp.get("")

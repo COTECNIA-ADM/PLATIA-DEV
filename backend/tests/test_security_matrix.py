@@ -20,7 +20,8 @@ from app.security.registry import MODULES
 # La respuesta de n8n, las solicitudes del formulario web y los fallos que avisa el flujo de
 # errores de n8n no llevan sesión de persona: exigen la clave de integración (ADR-020).
 PUBLIC = {"auth.login", "auth.mfa_verify", "auth.refresh", "health.quick", "automation.callback",
-          "automation.incident_inbound", "leads.inbound"}
+          "automation.incident_inbound", "leads.inbound", "opportunities.inbound",
+          "opportunities.inbound_document"}
 # Rutas de la propia cuenta: basta con la sesión (no dependen de un permiso del rol)
 SESSION_ONLY = {"auth.me", "auth.logout", "auth.change_password", "auth.mfa_setup", "auth.mfa_enable",
                 "auth.mfa_disable"}

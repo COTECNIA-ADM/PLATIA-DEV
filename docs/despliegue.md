@@ -252,6 +252,21 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    traen si se importan con su id). Los fallos salen en *Automatizaciones → Monitorización*.
    Para enlazar un fallo con la ejecución de PLATIA, la clave `N8N_API_KEY` debe poder leer
    ejecuciones.
+12. Subflujos comunes (P14): importa los tres de `automations/subflujos/`, asigna «PLATIA · clave
+   de integración» a «Entregar a PLATIA» y «Responder a PLATIA», y «PLATIA · correo SMTP» a
+   «Enviar correo» (cambia el remitente). **Publícalos**: en n8n 2.x un subflujo sin publicar no
+   se puede llamar. Impórtalos antes que los flujos que los usan.
+13. Conector de TED (P8): importa `automations/entradas/p8-licitaciones-ted.json`, ajusta país,
+   prefijos CPV y días en «Preparar consulta» y publícalo. Se ejecuta cada mañana a las 7; para
+   probarlo, ábrelo y pulsa *Execute workflow*. Los anuncios salen en *Oportunidades* con fuente
+   `ted` en «detectada».
+14. Buzón de pliegos (P6): crea una credencial **IMAP** llamada «PLATIA · buzón de pliegos» con un
+   buzón propio (no el personal), importa `automations/entradas/p6-buzon-de-pliegos.json`,
+   asigna «PLATIA · clave de integración» a «Crear oportunidad» y «Subir adjunto», limita si
+   quieres los dominios en «Preparar oportunidad» y publícalo. Cada correo nuevo crea una
+   oportunidad con sus adjuntos y lo marca como leído.
+15. Reparto (P18): en PLATIA, *Oportunidades → Reparto* (`opportunities.manage`). Las reglas se
+   aplican cada hora a lo que llega sin responsable.
 
 Un flujo se puede lanzar desde PLATIA si está activo y empieza por un nodo **Webhook** con
 método POST y autenticación «Header Auth» con la clave del webhook. Recibe en el cuerpo

@@ -1,0 +1,85 @@
+{
+  "id": "platiaSubCorreo01",
+  "name": "PLATIA · Subflujo · Enviar correo",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000301",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "para"
+            },
+            {
+              "name": "asunto"
+            },
+            {
+              "name": "texto"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000302",
+      "name": "Enviar correo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        300,
+        0
+      ],
+      "parameters": {
+        "fromEmail": "avisos@tu-empresa.es",
+        "toEmail": "={{ $json.para }}",
+        "subject": "={{ String($json.asunto || '').slice(0, 200) }}",
+        "emailFormat": "text",
+        "text": "={{ $json.texto }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "platiaCorreoSmtp",
+          "name": "PLATIA · correo SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagSubflujo",
+      "name": "platia-subflujo"
+    }
+  ]
+}

@@ -23,6 +23,7 @@
 | L2 | Ejecutar y seguir | Ejecuciones en BD, tarea en la cola `automation` con su worker, webhook con clave y firma, respuesta con clave de integración, pantallas de lanzar y seguir, y un flujo de ejemplo probado con n8n real | — | Hecha |
 | L3 | Taller y publicación | Catálogo propio en BD (fichas con descripción y campos del formulario), taller con borradores, comprobaciones automáticas del flujo y revisión antes de publicar; plantillas P1 (aviso de oportunidad) y P6 (recordatorio de plazo) en `automations/`, probadas con n8n real | — | Hecha |
 | P2 | Solicitudes del formulario web | Formulario de n8n con acuse por correo; la solicitud queda pendiente en *Operaciones → Solicitudes*, avisa a comercial y una persona la convierte en contacto u oportunidad o la descarta; probado con n8n real | — | Hecha |
+| P8·P6·P14·P18 | Lote 3 del portal Low-Code | Subflujos comunes (entregar, responder, correo); conector de TED con paginación y buzón de pliegos con adjuntos, que entregan oportunidades en `detected`; reglas de reparto al responsable con su pantalla. Probado con n8n real (TED simulado) | — | Hecha |
 | L4 | Monitorización | Flujo de errores común con incidencias en PLATIA (cierra la ejecución que falló y avisa a quien administra) y pantalla de salud por flujo, probado con n8n real. Pendiente: IA desde los flujos y segunda ola de casos | — | En curso |
 
 ## Del núcleo mínimo a los 17 servicios del libro

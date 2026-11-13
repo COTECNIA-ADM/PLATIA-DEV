@@ -1,0 +1,177 @@
+{
+  "id": "platiaTed01",
+  "name": "PLATIA · P8 Licitaciones de TED",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000401",
+      "name": "Cada mañana",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000402",
+      "name": "Preparar consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Qué anuncios se traen de TED. Cambia estos valores y guarda el flujo.\nconst PAIS = 'ESP';                  // país del poder adjudicador (código de tres letras)\nconst CPV = ['72*', '48*', '79*'];   // prefijos CPV de interés; [] = todos\nconst DIAS = 1;                      // anuncios publicados en los últimos N días\n\nconst desde = new Date(Date.now() - DIAS * 86400000).toISOString().slice(0, 10).replace(/-/g, '');\nlet query = `buyer-country = ${PAIS} AND publication-date >= ${desde}`;\nif (CPV.length) query += ' AND (' + CPV.map((c) => `classification-cpv = ${c}`).join(' OR ') + ')';\nreturn [{ json: { query } }];"
+      }
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000403",
+      "name": "Buscar en TED",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ted.europa.eu/v3/notices/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query, fields: [\"publication-number\", \"notice-title\", \"buyer-name\", \"buyer-country\", \"classification-cpv\", \"notice-type\", \"publication-date\", \"deadline-receipt-tender-date-lot\", \"estimated-value-proc\", \"estimated-value-cur-proc\", \"estimated-value-glo\", \"estimated-value-cur-glo\", \"estimated-value-lot\", \"estimated-value-cur-lot\"], limit: 100, paginationMode: 'ITERATION' }) }}",
+        "options": {
+          "timeout": 60000,
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "body",
+                    "name": "iterationNextToken",
+                    "value": "={{ $response.body.iterationNextToken }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.iterationNextToken || !($response.body.notices || []).length }}",
+              "limitPagesFetched": true,
+              "maxRequests": 30,
+              "requestInterval": 1000
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000404",
+      "name": "Entregar a PLATIA",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        750,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "platiaSubEntregar01",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ruta": "/api/opportunities/inbound",
+            "cuerpo": "={{ { source: 'ted', format: 'ted', workflow_id: $workflow.id, items: $json.notices || [] } }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ruta",
+              "displayName": "ruta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "cuerpo",
+              "displayName": "cuerpo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada mañana": {
+      "main": [
+        [
+          {
+            "node": "Preparar consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar consulta": {
+      "main": [
+        [
+          {
+            "node": "Buscar en TED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar en TED": {
+      "main": [
+        [
+          {
+            "node": "Entregar a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagInbound",
+      "name": "platia-entrada"
+    }
+  ]
+}

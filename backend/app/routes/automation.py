@@ -15,9 +15,8 @@ Solo dentro de la app automation (``X-App-Code: automation``).
   ``/incidents/inbound`` (misma clave de integración); quien construye ve incidencias y salud
   (``automations.build``) y quien administra las resuelve (``automations.manage``).
 """
-import hmac
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from ..api.common import MAX_SEARCH_LENGTH, check_version, page_args, paginate, parse_body
 from ..api.schemas import (AutomationCallbackIn, AutomationEntryIn, AutomationEntryPatch, AutomationIncidentIn,
@@ -28,6 +27,7 @@ from ..models import AuditAction, AutomationEntry, AutomationIncident, Automatio
 from ..queue import enqueue
 from ..security.audit import audit
 from ..security.context import platform_guard, require_permission
+from ..security.integration import integration_key_ok
 from ..security.ratelimit import rate_limit
 from ..services import automation as service
 from ..services import automation_incidents as incidents
@@ -296,19 +296,10 @@ def get_run(run_id: int):
     return jsonify(service.run_dict(_get_run(run_id), full=True))
 
 
-def _integration_key_ok() -> bool:
-    expected = current_app.config.get("N8N_CALLBACK_KEY") or ""
-    given = request.headers.get("X-Platia-Integration-Key") or ""
-    if not expected or not hmac.compare_digest(given.encode(), expected.encode()):
-        audit(AuditAction.ACCESS_DENIED, "WARNING", details={"path": request.path, "reason": "integration_key"})
-        return False
-    return True
-
-
 @automation_bp.post("/runs/<int:run_id>/callback")
 @rate_limit("RATE_LIMIT_WRITE", scope="ip")
 def callback(run_id: int):
-    if not _integration_key_ok():
+    if not integration_key_ok():
         return jsonify(error="Autenticación requerida."), 401
     data = parse_body(AutomationCallbackIn)
     run = service.complete(run_id, data.status, data.result, data.error)
@@ -320,7 +311,7 @@ def callback(run_id: int):
 @automation_bp.post("/incidents/inbound")
 @rate_limit("RATE_LIMIT_WRITE", scope="ip")
 def incident_inbound():
-    if not _integration_key_ok():
+    if not integration_key_ok():
         return jsonify(error="Autenticación requerida."), 401
     incident, created = incidents.record(parse_body(AutomationIncidentIn).model_dump())
     db.session.commit()
