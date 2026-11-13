@@ -230,11 +230,18 @@ export default function Opportunities() {
             {data?.engine === 'mysql' && ' · búsqueda básica (el buscador rápido no responde)'}
           </p>
         </div>
-        {can('opportunities', 'write') && (
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            Nueva oportunidad
-          </button>
-        )}
+        <div className="actions">
+          {can('opportunities', 'manage') && (
+            <Link className="btn" to="/opportunities/routing-rules">
+              Reparto
+            </Link>
+          )}
+          {can('opportunities', 'write') && (
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              Nueva oportunidad
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="toolbar">

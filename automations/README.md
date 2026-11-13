@@ -11,7 +11,8 @@ Credenciales que usan:
 | --- | --- | --- |
 | PLATIA · clave del webhook | Header Auth (`X-Platia-Webhook-Key`) | El Webhook solo acepta llamadas de PLATIA |
 | PLATIA · clave de integración | Header Auth (`X-Platia-Integration-Key`) | La respuesta del flujo a PLATIA |
-| PLATIA · correo SMTP | SMTP | Enviar correos (plantillas P1, P6 y el acuse de P2) |
+| PLATIA · correo SMTP | SMTP | Enviar correos (plantillas P1, P6, el acuse de P2 y el subflujo de correo) |
+| PLATIA · buzón de pliegos | IMAP | Leer el buzón de pliegos (P6) |
 
 ## Ejemplo
 
@@ -71,3 +72,32 @@ ido el correo; si PLATIA no responde, reintenta tres veces. La solicitud aparece
 *Operaciones → Solicitudes* y una persona decide si la convierte en contacto u oportunidad
 o la descarta. Antes de publicarlo, cambia el remitente (`comercial@tu-empresa.es`) del nodo
 «Enviar acuse» y, si quieres, los textos del formulario.
+
+**P8 · Licitaciones de TED** (`entradas/p8-licitaciones-ted.json`, id `platiaTed01`). Cada
+mañana a las 7 consulta la API de búsqueda de TED (pública, sin clave) con la consulta del nodo
+«Preparar consulta» (país, prefijos CPV y días hacia atrás), pagina con `iterationNextToken`
+(100 por página, 30 páginas como mucho, un segundo entre páginas) y entrega cada página con el
+subflujo «Entregar a PLATIA» en `/api/opportunities/inbound` (formato `ted`). PLATIA normaliza,
+no duplica y deja las nuevas en «detectada»; la revisión horaria las puntúa y las reparte.
+
+**P6 · Buzón de pliegos** (`entradas/p6-buzon-de-pliegos.json`, id `platiaBuzon01`). Lee los
+correos nuevos de un buzón IMAP propio, crea una oportunidad por correo (asunto, remitente y
+texto; el id es el `Message-ID`) y sube los adjuntos de tipos admitidos (PDF, Word, Excel,
+PowerPoint, ODT, RTF, TXT, CSV; hasta 20) a `/api/opportunities/inbound/{id}/documents`. Un
+correo repetido no sube nada. En «Preparar oportunidad» puedes limitar los dominios de los
+remitentes.
+
+## Subflujos comunes (P14)
+
+En `subflujos/`, con la etiqueta `platia-subflujo`. Empiezan por un «Execute Workflow Trigger»
+y se llaman con un nodo «Execute Workflow» por su id. **Deben estar publicados** (n8n 2.x) y
+ser del mismo propietario que quien los llama.
+
+| Subflujo | Id | Entradas | Qué hace |
+| --- | --- | --- | --- |
+| Entregar a PLATIA | `platiaSubEntregar01` | `ruta`, `cuerpo` | POST con la clave de integración a una ruta `/api/.../inbound` del backend; tres intentos |
+| Responder a PLATIA | `platiaSubResponder01` | `callback_url`, `estado`, `resultado`, `error` | Cierra la ejecución lanzada desde PLATIA (`succeeded` o `failed`) |
+| Enviar correo | `platiaSubCorreo01` | `para`, `asunto`, `texto` | Correo de texto con la credencial SMTP común |
+
+Las comprobaciones del Taller cuentan una llamada a «Responder a PLATIA» como respuesta a
+`callback_url`, y una a «Entregar a PLATIA» con una ruta de entrada como entrega a PLATIA.

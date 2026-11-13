@@ -753,6 +753,77 @@ class InboundLeadIn(Schema):
     ack_sent: bool = False
 
 
+class InboundOpportunityItem(Schema):
+    """Un anuncio ya normalizado por el flujo (formato ``platia``)."""
+
+    id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+    title: Str500
+    description: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20000)] | None = None
+    link: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000,
+                                           pattern=r"^https://")] | None = None
+    entity: OptStr255 = None
+    cpv_codes: list[Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^\d{8}(-\d)?$")]] | None = \
+        Field(default=None, max_length=50)
+    estimated_value: Money | None = None
+    deadline: datetime | None = None
+    published_at: datetime | None = None
+
+
+class InboundOpportunitiesIn(Schema):
+    """Un lote de anuncios que entrega un flujo de entrada (casos P8 y P6). En formato ``ted``
+    llegan tal como los da la API de TED y se normalizan en el servicio."""
+
+    source: Literal["ted", "buzon_pliegos"]
+    format: Literal["ted", "platia"] = "platia"
+    workflow_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64,
+                                                  pattern=r"^[A-Za-z0-9]*$")] | None = None
+    items: list[dict] = Field(max_length=250)
+
+    @model_validator(mode="after")
+    def _items(self):
+        if self.format == "platia":
+            try:
+                self.items = [InboundOpportunityItem.model_validate(i).model_dump() for i in self.items]
+            except ValueError as exc:  # ValidationError de un ítem: se informa como del lote
+                raise ValueError(f"Ítem no válido: {exc.errors()[0]['msg'] if hasattr(exc, 'errors') else exc}") from None
+        return self
+
+
+ShortList = list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]]
+
+
+class RoutingRuleFields(Schema):
+    name: Str255
+    position: int = Field(default=100, ge=0, le=10000)
+    is_enabled: bool = True
+    sources: ShortList | None = Field(default=None, max_length=20)
+    service_lines: ShortList | None = Field(default=None, max_length=20)
+    sectors: ShortList | None = Field(default=None, max_length=20)
+    min_value_eur: Money | None = None
+    max_value_eur: Money | None = None
+    max_days_to_deadline: int | None = Field(default=None, ge=0, le=3650)
+    owner_user_id: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _range(self):
+        if self.min_value_eur is not None and self.max_value_eur is not None and self.min_value_eur > self.max_value_eur:
+            raise ValueError("El importe mínimo no puede ser mayor que el máximo.")
+        for field in ("sources", "service_lines", "sectors"):
+            if getattr(self, field) == []:
+                setattr(self, field, None)
+        return self
+
+
+class RoutingRuleIn(RoutingRuleFields):
+    """Regla de reparto de oportunidades (caso P18)."""
+
+
+class RoutingRulePatch(RoutingRuleFields):
+    """Al editar se envía la regla completa con su versión."""
+
+    version: int = Field(ge=1)
+
+
 class LeadResolveIn(Versioned):
     action: Literal["contact", "opportunity", "discard"]
     client_id: int | None = Field(default=None, ge=1)

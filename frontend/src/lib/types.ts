@@ -427,3 +427,26 @@ export type Lead = LeadSummary & {
   resolution_note: string | null
   matches: { id: number; name: string; tax_id: string | null }[]
 }
+
+// Reparto de oportunidades (caso P18, ADR-020)
+export interface RoutingRule {
+  id: number
+  name: string
+  position: number
+  is_enabled: boolean
+  sources: string[]
+  service_lines: string[]
+  sectors: string[]
+  min_value_eur: string | null
+  max_value_eur: string | null
+  max_days_to_deadline: number | null
+  owner_user_id: number
+  owner_name: string | null
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export interface RoutingRulesPage extends Page<RoutingRule> {
+  candidates: { id: number; name: string }[]
+}

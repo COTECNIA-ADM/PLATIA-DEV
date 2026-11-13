@@ -4,15 +4,14 @@
   integración ``N8N_CALLBACK_KEY`` en ``X-Platia-Integration-Key``. Solo guarda y avisa.
 - Listado, detalle y resolución en la app de operaciones (``leads.read`` y ``leads.manage``).
 """
-import hmac
-
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from ..api.common import check_version, get_active, paginate, parse_body, record_audit
 from ..api.schemas import InboundLeadIn, LeadResolveIn
 from ..extensions import db
 from ..models import AuditAction, InboundLead
 from ..security.audit import audit
+from ..security.integration import integration_key_ok
 from ..security.context import platform_guard, require_permission
 from ..security.ratelimit import rate_limit
 from ..services import leads as service
@@ -23,10 +22,7 @@ leads_bp = Blueprint("leads", __name__, url_prefix="/api/leads")
 @leads_bp.post("/inbound")
 @rate_limit("RATE_LIMIT_WRITE", scope="ip")
 def inbound():
-    expected = current_app.config.get("N8N_CALLBACK_KEY") or ""
-    given = request.headers.get("X-Platia-Integration-Key") or ""
-    if not expected or not hmac.compare_digest(given.encode(), expected.encode()):
-        audit(AuditAction.ACCESS_DENIED, "WARNING", details={"path": request.path, "reason": "integration_key"})
+    if not integration_key_ok():
         return jsonify(error="Autenticación requerida."), 401
     data = parse_body(InboundLeadIn).model_dump()
     lead, created = service.receive(data)

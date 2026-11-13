@@ -1,0 +1,91 @@
+{
+  "id": "platiaSubResponder01",
+  "name": "PLATIA · Subflujo · Responder a PLATIA",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000201",
+      "name": "Entrada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "callback_url"
+            },
+            {
+              "name": "estado"
+            },
+            {
+              "name": "resultado",
+              "type": "object"
+            },
+            {
+              "name": "error"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000202",
+      "name": "Responder a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.estado === 'failed' ? { status: 'failed', error: String($json.error || 'El flujo ha fallado.').slice(0, 2000) } : { status: 'succeeded', result: $json.resultado || {} }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Responder a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagSubflujo",
+      "name": "platia-subflujo"
+    }
+  ]
+}

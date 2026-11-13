@@ -9,6 +9,7 @@ from ..extensions import db
 from ..models import Alert, Opportunity, Proposal, ServiceLine, utcnow
 from ..queue import PRIORITY_MAINTENANCE, PlatformTask, celery, enqueue
 from ..services import opportunities as opp_service
+from ..services import routing
 from ..services.notifications import notify, notify_many, operations_managers
 
 log = structlog.get_logger(__name__)
@@ -30,11 +31,15 @@ def proactive_scan(self) -> dict:
             func.coalesce(Opportunity.published_at, Opportunity.created_at) >= since,
         ).limit(1000)
     ).all()
-    alerts = 0
+    alerts = routed = 0
     to_index: list[int] = []
+    rules = routing.active_rules()
     vector_threshold = current_app.config.get("OPPORTUNITY_VECTOR_THRESHOLD", 7.0)
     for opp in recent:
         best = opp_service.score_opportunity(opp, lines)
+        # Reparto (P18): con la línea de servicio ya puesta, la primera regla que encaje
+        if rules and opp.owner_user_id is None and routing.route(opp, rules) is not None:
+            routed += 1
         if best is not None and best["score"] >= vector_threshold:
             to_index.append(opp.id)
         if best is None or best["score"] < threshold:
@@ -48,7 +53,8 @@ def proactive_scan(self) -> dict:
                    f"(puntuación {best['score']:.1f}/10).")
         db.session.add(Alert(alert_type="OPPORTUNITY_MATCH", opportunity_id=opp.id,
                              score=round(best["score"] * 10), message=message))
-        recipients = [line.owner_user_id] if line.owner_user_id else operations_managers()
+        recipients = ([opp.owner_user_id] if opp.owner_user_id
+                      else [line.owner_user_id] if line.owner_user_id else operations_managers())
         notify_many(recipients, "OPPORTUNITY_MATCH", "Oportunidad relevante detectada", message,
                     link=f"/opportunities/{opp.id}", extra_data=best)
         alerts += 1
@@ -58,8 +64,8 @@ def proactive_scan(self) -> dict:
 
     for opp_id in to_index:
         enqueue(index_opportunity, opp_id, priority=PRIORITY_MAINTENANCE)
-    log.info("proactive_scan_done", scored=len(recent), alerts=alerts)
-    return {"scored": len(recent), "alerts": alerts}
+    log.info("proactive_scan_done", scored=len(recent), alerts=alerts, routed=routed)
+    return {"scored": len(recent), "alerts": alerts, "routed": routed}
 
 
 @celery.task(name="tasks.alerts.deal_stalled", base=PlatformTask, bind=True)

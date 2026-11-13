@@ -684,3 +684,28 @@ class AutomationIncident(VersionedMixin, BusinessMixin, db.Model):
     resolved_by: Mapped[int | None] = mapped_column(Integer)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     resolution_note: Mapped[str | None] = mapped_column(String(1000))
+
+
+class OpportunityRoutingRule(VersionedMixin, BusinessMixin, db.Model):
+    """Regla de reparto de oportunidades (caso P18 del portal Low-Code).
+
+    Las oportunidades que llegan solas (feeds, TED, buzón de pliegos) se crean sin responsable.
+    Tras puntuarlas, ``tasks.alerts.proactive_scan`` les aplica la primera regla activa que
+    encaje, por orden: fuente, línea de servicio, sector, importe y días hasta el plazo. Un
+    criterio vacío vale para todas. La regla asigna el responsable y le avisa.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "opportunity_routing_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sources: Mapped[list | None] = mapped_column(JSON(none_as_null=True))
+    service_lines: Mapped[list | None] = mapped_column(JSON(none_as_null=True))
+    sectors: Mapped[list | None] = mapped_column(JSON(none_as_null=True))
+    min_value_eur: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    max_value_eur: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    max_days_to_deadline: Mapped[int | None] = mapped_column(Integer)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False)  # platform_core.users

@@ -1,0 +1,188 @@
+{
+  "id": "platiaBuzon01",
+  "name": "PLATIA · P6 Buzón de pliegos",
+  "nodes": [
+    {
+      "id": "d4e5f6a7-0000-4000-8000-000000000501",
+      "name": "Correo nuevo",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "format": "resolved",
+        "downloadAttachments": true,
+        "postProcessAction": "read",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]"
+        }
+      },
+      "credentials": {
+        "imap": {
+          "id": "platiaBuzonImap",
+          "name": "PLATIA · buzón de pliegos"
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a7-0000-4000-8000-000000000502",
+      "name": "Preparar oportunidad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Remitentes admitidos: dominios de los que se aceptan pliegos. [] = cualquiera.\nconst DOMINIOS = [];\n\nconst salida = [];\nfor (const item of $input.all()) {\n  const m = item.json;\n  const remitente = (m.from?.value?.[0]?.address || m.from?.text || '').toLowerCase();\n  const dominio = remitente.split('@')[1] || '';\n  if (DOMINIOS.length && !DOMINIOS.includes(dominio)) continue;\n  const asunto = String(m.subject || '(sin asunto)').slice(0, 450);\n  const texto = String(m.text || '').slice(0, 15000);\n  const ref = String(m.messageId || `${remitente}|${m.date}|${asunto}`).slice(0, 255);\n  salida.push({\n    json: {\n      cuerpo: {\n        source: 'buzon_pliegos',\n        format: 'platia',\n        workflow_id: $workflow.id,\n        items: [{ id: ref, title: asunto, description: `Correo de ${remitente} recibido el ${m.date || '—'}.\\n\\n${texto}` }],\n      },\n    },\n    binary: item.binary,\n  });\n}\nreturn salida;"
+      }
+    },
+    {
+      "id": "d4e5f6a7-0000-4000-8000-000000000503",
+      "name": "Crear oportunidad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:5000/api/opportunities/inbound",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "d4e5f6a7-0000-4000-8000-000000000504",
+      "name": "Separar adjuntos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        750,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Un elemento por adjunto, solo para las oportunidades nuevas (un correo repetido no sube nada).\nconst TIPOS = ['pdf', 'docx', 'doc', 'xlsx', 'pptx', 'odt', 'rtf', 'txt', 'csv'];\nconst MAX = 20;\n\nconst correos = $('Preparar oportunidad').all();\nconst salida = [];\n$input.all().forEach((respuesta, i) => {\n  const id = (respuesta.json.created_ids || [])[0];\n  const adjuntos = correos[i]?.binary || {};\n  if (!id) return;\n  Object.values(adjuntos)\n    .filter((b) => TIPOS.includes(String(b.fileName || '').split('.').pop().toLowerCase()))\n    .slice(0, MAX)\n    .forEach((b) => salida.push({ json: { opp_id: id, nombre: b.fileName }, binary: { file: b } }));\n});\nreturn salida;"
+      }
+    },
+    {
+      "id": "d4e5f6a7-0000-4000-8000-000000000505",
+      "name": "Subir adjunto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:5000/api/opportunities/inbound/{{ $json.opp_id }}/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "source",
+              "value": "buzon_pliegos"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Correo nuevo": {
+      "main": [
+        [
+          {
+            "node": "Preparar oportunidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar oportunidad": {
+      "main": [
+        [
+          {
+            "node": "Crear oportunidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear oportunidad": {
+      "main": [
+        [
+          {
+            "node": "Separar adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Subir adjunto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagInbound",
+      "name": "platia-entrada"
+    }
+  ]
+}
