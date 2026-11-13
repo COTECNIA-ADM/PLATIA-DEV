@@ -58,6 +58,8 @@ def upgrade_operations():
         sa.Column('deleted_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
+    with op.batch_alter_table('opportunity_routing_rules', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_opportunity_routing_rules_is_active'), ['is_active'], unique=False)
 
 
 def downgrade_operations():
