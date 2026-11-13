@@ -10,6 +10,8 @@ Hay dos clases de flujo:
 - ``launch``: se lanza desde el catálogo; empieza por un Webhook y responde a ``callback_url``.
 - ``inbound``: recoge algo de fuera (por ejemplo, el formulario web del caso P2) y lo entrega en
   ``/api/leads/inbound`` con la clave de integración. No pasa por el catálogo.
+- ``error``: el flujo de errores común (fase L4). Empieza por un Error Trigger y entrega el
+  fallo en ``/api/automation/incidents/inbound`` con la clave de integración.
 """
 import re
 
@@ -72,19 +74,21 @@ def input_names(raw: dict) -> list[str]:
 
 
 INBOUND_PATH = "/api/leads/inbound"
+INCIDENTS_PATH = "/api/automation/incidents/inbound"
+ERROR_TRIGGER = "n8n-nodes-base.errorTrigger"
 
 
 def _header_auth(params: dict) -> bool:
     return params.get("authentication") == "genericCredentialType" and params.get("genericAuthType") == "httpHeaderAuth"
 
 
-def _inbound_checks(nodes: list[dict]) -> list[dict]:
+def _inbound_checks(nodes: list[dict], path: str = INBOUND_PATH) -> list[dict]:
     issues = []
     targets = [n for n in nodes if n.get("type") == HTTP_REQUEST
-               and INBOUND_PATH in str((n.get("parameters") or {}).get("url") or "")]
+               and path in str((n.get("parameters") or {}).get("url") or "")]
     if not targets:
         issues.append(_issue("inbound_target", "error",
-                             f"El flujo no entrega nada a PLATIA: falta un HTTP Request a «{INBOUND_PATH}»."))
+                             f"El flujo no entrega nada a PLATIA: falta un HTTP Request a «{path}»."))
     for node in targets:
         if not _header_auth(node.get("parameters") or {}):
             issues.append(_issue("inbound_auth", "error",
@@ -129,7 +133,14 @@ def _launch_checks(nodes: list[dict]) -> list[dict]:
 
 def run_checks(raw: dict, fields: list[dict] | None = None, kind: str = "launch") -> list[dict]:
     nodes = [n for n in raw.get("nodes") or [] if not n.get("disabled")]
-    issues = _inbound_checks(nodes) if kind == "inbound" else _launch_checks(nodes)
+    if kind == "inbound":
+        issues = _inbound_checks(nodes)
+    elif kind == "error":
+        issues = _inbound_checks(nodes, INCIDENTS_PATH)
+        if not any(n.get("type") == ERROR_TRIGGER for n in nodes):
+            issues.append(_issue("error_trigger", "error", "El flujo de errores debe empezar por un «Error Trigger»."))
+    else:
+        issues = _launch_checks(nodes)
 
     for node in nodes:
         ntype = node.get("type") or ""
@@ -150,7 +161,7 @@ def run_checks(raw: dict, fields: list[dict] | None = None, kind: str = "launch"
 
     if not raw.get("active"):
         issues.append(_issue("inactive", "warning", "El flujo no está activo en n8n: no se podrá lanzar."))
-    if not (raw.get("settings") or {}).get("errorWorkflow"):
+    if kind != "error" and not (raw.get("settings") or {}).get("errorWorkflow"):
         issues.append(_issue("error_workflow", "warning",
                              "El flujo no tiene flujo de errores: si falla, PLATIA se enterará por el plazo."))
 

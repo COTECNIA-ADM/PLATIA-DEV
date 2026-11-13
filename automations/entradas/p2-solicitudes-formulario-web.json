@@ -166,7 +166,8 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "errorWorkflow": "platiaErrores01"
   },
   "pinData": {},
   "tags": [

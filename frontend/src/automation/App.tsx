@@ -10,6 +10,7 @@ const Runs = lazy(() => import('./Runs'))
 const RunDetail = lazy(() => import('./RunDetail'))
 const Workshop = lazy(() => import('./Workshop'))
 const EntryDetail = lazy(() => import('./EntryDetail'))
+const Monitor = lazy(() => import('./Monitor'))
 const Account = lazy(() => import('../pages/Account'))
 const Health = lazy(() => import('../pages/Health'))
 
@@ -18,6 +19,7 @@ const NAV: NavItem[] = [
   { to: '/catalog', label: 'Catálogo', icon: '▤', module: 'automations' },
   { to: '/runs', label: 'Ejecuciones', icon: '↻', module: 'automations' },
   { to: '/workshop', label: 'Taller', icon: '⚒', module: 'automations', action: 'build' },
+  { to: '/monitor', label: 'Monitorización', icon: '⚠', module: 'automations', action: 'build' },
 ]
 
 export default function App() {
@@ -31,6 +33,7 @@ export default function App() {
           <Route path="runs/:id" element={<RunDetail />} />
           <Route path="workshop" element={<Workshop />} />
           <Route path="workshop/:id" element={<EntryDetail />} />
+          <Route path="monitor" element={<Monitor />} />
           <Route path="account" element={<Account />} />
           <Route path="status" element={<Health />} />
           <Route path="*" element={<NotFound />} />

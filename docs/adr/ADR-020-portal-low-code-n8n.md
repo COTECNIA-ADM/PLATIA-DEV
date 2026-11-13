@@ -89,6 +89,25 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
 - No se exige que publique una persona distinta de la que construye: en instalaciones
   pequeñas es la misma. Queda registrado quién envió y quién publicó.
 
+**Monitorización (fase L4)**
+- Un flujo de errores común en n8n (`automations/errores/platia-flujo-de-errores.json`, con un
+  «Error Trigger») avisa a PLATIA en `POST /api/automation/incidents/inbound`, con la clave de
+  integración, cada vez que falla un flujo que lo tiene en sus ajustes (*Error workflow*).
+  Todas las plantillas lo llevan puesto y el Taller avisa si falta.
+- PLATIA guarda la incidencia en `operations_db.automation_incidents`: flujo, ejecución de
+  n8n, nodo y mensaje recortado a 500 caracteres; nunca los datos del flujo. Se repite sin
+  duplicar (flujo + ejecución).
+- Si la ejecución de n8n venía de PLATIA, el backend la lee con la API de n8n
+  (`/executions/{id}?includeData=true`), busca el `run_id` del cuerpo del Webhook y cierra esa
+  ejecución como fallida con el paso que falló: la persona no espera al plazo de seis horas.
+  De lo leído no se guarda nada más. Si n8n no responde, la incidencia se guarda igual.
+- Avisa a quien tiene `automations.manage` (y a los superadmin) en el centro de avisos, con un
+  enlace a la monitorización de ese flujo; mientras no lo lea, otro fallo del mismo flujo no
+  repite el aviso.
+- La pantalla *Monitorización* (`automations.build`) resume por flujo las ejecuciones del
+  periodo (correctas, fallidas, en marcha, éxito y duración media) y lista las incidencias;
+  quien administra las marca como resueltas con una nota.
+
 **Entradas de fuera: solicitudes del formulario web (caso P2)**
 - Un flujo de n8n con un formulario propio (sin usuario de PLATIA) envía el acuse a quien
   escribe y entrega la solicitud en `POST /api/leads/inbound` con la clave de integración. Es

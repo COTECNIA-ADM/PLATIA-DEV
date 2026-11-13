@@ -48,6 +48,15 @@ Campos de la ficha:
 Al crear la ficha en *Automatizaciones → Taller*, PLATIA propone los nombres de los datos
 que usa el flujo; solo hay que ponerles etiqueta y tipo.
 
+## Flujo de errores
+
+`errores/platia-flujo-de-errores.json` (id `platiaErrores01`): empieza por un «Error Trigger» y
+avisa a PLATIA de cada fallo (flujo, ejecución, paso y mensaje) con la clave de integración.
+Todas las plantillas de esta carpeta lo tienen puesto en *Settings → Error workflow*; si
+importas un flujo con otro id, vuelve a elegirlo ahí. Los fallos aparecen en
+*Automatizaciones → Monitorización* y, si el flujo se había lanzado desde PLATIA, la
+ejecución se cierra como fallida en el momento.
+
 ## Flujos de entrada
 
 No se lanzan desde PLATIA ni pasan por el Taller: recogen algo de fuera y lo entregan a

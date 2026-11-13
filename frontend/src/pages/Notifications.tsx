@@ -10,11 +10,14 @@ const TYPES: Record<string, string> = {
   NEW_OPPORTUNITY: 'Oportunidad nueva',
   OPPORTUNITY_MATCH: 'Encaja contigo',
   NEW_LEAD: 'Solicitud web',
+  AUTOMATION_FAILED: 'Automatización fallida',
   DEAL_STALLED: 'Sin avances',
   ACCOUNT_RISK: 'Riesgo de cliente',
   REPORT_READY: 'Listo',
   SYSTEM: 'Sistema',
 }
+
+const OTHER_APP = /^\/(automation|analytics|admin)(\/|\?|$)/
 
 function Alerts() {
   const { can } = useAuth()
@@ -73,7 +76,10 @@ export default function Notifications() {
 
   function open(n: Notification) {
     if (!n.read_at) read.mutate(n.id)
-    if (n.link) navigate(n.link)
+    if (!n.link) return
+    // Los avisos de otra aplicación (p. ej. /automation/...) abren esa aplicación
+    if (OTHER_APP.test(n.link)) window.location.assign(n.link)
+    else navigate(n.link)
   }
 
   return (

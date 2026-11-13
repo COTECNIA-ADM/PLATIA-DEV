@@ -92,11 +92,26 @@ def test_disabled_nodes_are_ignored():
 
 @pytest.mark.parametrize("path", sorted(TEMPLATES.rglob("*.json")), ids=lambda p: p.name)
 def test_repository_templates_pass_the_checks(path):
-    """Las de ``entradas/`` son flujos de entrada (caso P2): entregan a PLATIA, no se lanzan."""
+    """Las de ``entradas/`` son flujos de entrada (caso P2) y la de ``errores/`` el flujo de errores
+    común (L4): entregan a PLATIA, no se lanzan. Todas las demás usan el flujo de errores."""
     raw = json.loads(path.read_text(encoding="utf-8"))
-    kind = "inbound" if path.parent.name == "entradas" else "launch"
-    errors = [i for i in checks.run_checks({**raw, "active": True}, kind=kind) if i["level"] == "error"]
-    assert errors == []
+    kind = {"entradas": "inbound", "errores": "error"}.get(path.parent.name, "launch")
+    issues = checks.run_checks({**raw, "active": True}, kind=kind)
+    assert [i for i in issues if i["level"] == "error"] == []
+    assert "error_workflow" not in [i["code"] for i in issues]
+
+
+def test_error_workflow_checks():
+    raw = json.loads((TEMPLATES / "errores" / "platia-flujo-de-errores.json").read_text(encoding="utf-8"))
+    raw["active"] = True
+    assert checks.run_checks(raw, kind="error") == []
+    trigger = next(n for n in raw["nodes"] if n["type"] == checks.ERROR_TRIGGER)
+    raw["nodes"].remove(trigger)
+    assert [i["code"] for i in checks.run_checks(raw, kind="error")] == ["error_trigger"]
+    # Entregar en la ruta de solicitudes no vale para los fallos
+    raw["nodes"].append(trigger)
+    raw["nodes"][0]["parameters"]["url"] = "http://backend:5000/api/leads/inbound"
+    assert "inbound_target" in [i["code"] for i in checks.run_checks(raw, kind="error")]
 
 
 def test_inbound_workflows_must_deliver_with_the_key():
