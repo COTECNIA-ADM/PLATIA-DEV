@@ -492,6 +492,7 @@ class Notification(BusinessMixin, db.Model):
         "ACCOUNT_RISK",
         "REPORT_READY",
         "OPPORTUNITY_MATCH",
+        "NEW_LEAD",
         "SYSTEM",
     )
     PRIORITIES = ("low", "normal", "high", "urgent")
@@ -609,3 +610,44 @@ class AutomationRun(BusinessMixin, db.Model):
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class InboundLead(VersionedMixin, BusinessMixin, db.Model):
+    """Solicitud que llega de fuera, por ejemplo del formulario web (caso P2, ADR-020).
+
+    La entrega un flujo de n8n con la clave de integración. Nunca crea clientes, contactos ni
+    oportunidades por sí sola: queda pendiente (``new``) hasta que una persona de comercial la
+    convierte (``converted``) o la descarta (``discarded``). ``created_by`` queda nulo, porque
+    no la crea ninguna persona de la plataforma.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "inbound_leads"
+    __table_args__ = (
+        UniqueConstraint("source", "external_ref", name="uq_inbound_leads_source_ref"),
+        Index("ix_inbound_leads_status_created", "status", "created_at"),
+    )
+
+    STATUSES = ("new", "converted", "discarded")
+    RESOLUTIONS = ("contact", "opportunity")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)  # p. ej. formulario_web
+    external_ref: Mapped[str | None] = mapped_column(String(100))  # id de la ejecución en n8n
+    workflow_id: Mapped[str | None] = mapped_column(String(64))
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(50))
+    company: Mapped[str | None] = mapped_column(String(255))
+    tax_id: Mapped[str | None] = mapped_column(String(32))
+    subject: Mapped[str | None] = mapped_column(String(255))
+    message: Mapped[str | None] = mapped_column(Text)
+    ack_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="new", nullable=False)
+    resolution: Mapped[str | None] = mapped_column(String(12))
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"))
+    contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id"))
+    opportunity_id: Mapped[int | None] = mapped_column(ForeignKey("opportunities.id"))
+    resolved_by: Mapped[int | None] = mapped_column(Integer)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    resolution_note: Mapped[str | None] = mapped_column(String(1000))

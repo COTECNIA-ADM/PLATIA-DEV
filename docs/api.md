@@ -59,6 +59,8 @@ métodos), `[/{id}]` (tramo opcional) y rutas sin el prefijo `/api`.
 | Taller de automatizaciones | `GET /automation/workflows` (flujos de n8n con la etiqueta del catálogo y su `entry_id`), `GET/POST /automation/entries` (`status`), `GET/PATCH /automation/entries/{id}` (con `version`; solo en borrador o retirada; el detalle trae `input_names`, los datos que usa el flujo), `POST /automation/entries/{id}/check` (comprobaciones del flujo), `POST /automation/entries/{id}/submit` (a revisión; 422 si hay errores). Solo con `X-App-Code: automation` | `automations.build` |
 | Publicación de automatizaciones | `POST /automation/entries/{id}/review` (`decision` `approve\|reject`, `note`; al aprobar se vuelve a comprobar el flujo), `POST /automation/entries/{id}/retire` | `automations.manage` |
 | Respuesta de n8n | `POST /automation/runs/{id}/callback` (`status` `succeeded\|failed`, `result` y `error`; una sola vez por ejecución, 409 si ya está cerrada). Sin sesión: cabecera `X-Platia-Integration-Key` con `N8N_CALLBACK_KEY` | clave de integración |
+| Solicitudes del formulario web | `GET /leads` (`status` `new\|converted\|discarded`), `GET /leads/{id}` (con mensaje y `matches`, clientes que podrían ser el de la solicitud), `POST /leads/{id}/resolve` (`version`, `action` `contact\|opportunity\|discard`, `client_id` o `new_client_name`, `opportunity_title`, `note`; crear el contacto exige además `clients.write` y la oportunidad `opportunities.write`; 409 si ya está resuelta) | `leads.read` / `leads.manage` |
+| Entrada de solicitudes | `POST /leads/inbound` (`source`, `external_ref`, `workflow_id`, `full_name`, `email`, `phone`, `company`, `tax_id`, `subject`, `message` hasta 5.000, `consent` obligatorio a `true`, `ack_sent`; 201, o 200 con `duplicate` si ya llegó esa `external_ref`). Solo guarda y avisa a quien tiene `leads.read`: nunca crea clientes ni oportunidades. Sin sesión: cabecera `X-Platia-Integration-Key` con `N8N_CALLBACK_KEY` | clave de integración |
 | Pregunta a tus datos | `POST /analytics/ask` (`question`, `months`, `service_line`, `sector`) | `dashboards.read` + `analytics_assistant` |
 | Usuarios (admin) | `GET /admin/users` (`q`, `status=active\|inactive`, `app`; `items` + `pagination`), `POST /admin/users`, `GET /admin/users/{id}`, `PUT/DELETE /admin/users/{id}/memberships/{app}` (`role`), `POST /admin/users/{id}/deactivate`, `POST /admin/users/{id}/reactivate`, `POST /admin/users/{id}/mfa/reset` | `users`, `roles` |
 | Roles (admin) | `GET /admin/apps` (aplicaciones con módulos, acciones y roles), `PATCH /admin/roles/{id}` (`version`, `permissions`) | `roles` |
@@ -153,6 +155,7 @@ para el resto no existe (404), tampoco en las búsquedas ni en las respuestas de
 | Modificar las de otros, reasignar | | | ✓ | ✓ |
 | Clientes, plantillas, portfolio, talento (escritura) | | | ✓ | ✓ |
 | Aprobar y enviar propuestas, exportar CSV | | | ✓ | ✓ |
+| Ver y resolver solicitudes del formulario web | | | ✓ | ✓ |
 
 ## Probarlo
 

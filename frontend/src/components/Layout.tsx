@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { to: '/proposals', label: 'Propuestas', icon: '✎', module: 'proposals' },
   { to: '/copilot', label: 'Copiloto', icon: '✦', module: 'copilot', ai: 'copilot_chat' },
   { to: '/clients', label: 'Clientes', icon: '◇', module: 'clients' },
+  { to: '/leads', label: 'Solicitudes', icon: '✉', module: 'leads' },
   { to: '/talent', label: 'Talento', icon: '☺', module: 'talent' },
 ]
 

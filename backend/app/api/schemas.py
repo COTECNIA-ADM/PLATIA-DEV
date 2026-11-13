@@ -727,3 +727,45 @@ class AutomationCallbackIn(Schema):
     status: Literal["succeeded", "failed"]
     result: dict | None = None
     error: Annotated[str, StringConstraints(max_length=500)] | None = None
+
+
+# ---------------------------------------------------------------- Solicitudes (caso P2)
+Email = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+
+
+class InboundLeadIn(Schema):
+    """Lo que entrega n8n desde el formulario web. Todo es dato de fuera: se guarda tal cual,
+    acotado, y se enseña como texto."""
+
+    source: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[a-z0-9_]{1,64}$")]
+    external_ref: Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None = None
+    workflow_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64,
+                                                  pattern=r"^[A-Za-z0-9]*$")] | None = None
+    full_name: Str255
+    email: Email
+    phone: Annotated[str, StringConstraints(strip_whitespace=True, max_length=50)] | None = None
+    company: OptStr255 = None
+    tax_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)] | None = None
+    subject: OptStr255 = None
+    message: Annotated[str, StringConstraints(strip_whitespace=True, max_length=5000)] | None = None
+    # Sin aceptación de la política de privacidad no se guarda nada
+    consent: Literal[True]
+    ack_sent: bool = False
+
+
+class LeadResolveIn(Versioned):
+    action: Literal["contact", "opportunity", "discard"]
+    client_id: int | None = Field(default=None, ge=1)
+    new_client_name: Str255 | None = None
+    opportunity_title: Str500 | None = None
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] | None = None
+
+    @model_validator(mode="after")
+    def _client(self):
+        if self.client_id and self.new_client_name:
+            raise ValueError("Elige un cliente existente o uno nuevo, no los dos.")
+        if self.action == "discard" and (self.client_id or self.new_client_name or self.opportunity_title):
+            raise ValueError("Al descartar no se indica cliente ni oportunidad.")
+        if self.action == "contact" and self.opportunity_title:
+            raise ValueError("El título solo se usa al crear una oportunidad.")
+        return self

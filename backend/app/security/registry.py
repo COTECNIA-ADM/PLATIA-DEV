@@ -17,6 +17,7 @@ MODULES: dict[str, set[str]] = {
     "talent": {"read", "write", "delete"},
     "alerts": {"read", "write"},
     "notifications": {"read"},
+    "leads": {"read", "manage"},  # solicitudes que llegan del formulario web (caso P2, ADR-020)
     "copilot": {"read", "write"},  # conversaciones y memoria propias (fase 5c)
     "reports": {"read", "generate"},
     # --- analytics
@@ -42,7 +43,7 @@ MODULES: dict[str, set[str]] = {
 # Un módulo puede estar en varias: los permisos se guardan por rol y cada rol es de una app.
 APP_MODULES: dict[str, tuple[str, ...]] = {
     "operations": ("clients", "opportunities", "documents", "proposals", "templates", "portfolio", "talent",
-                   "alerts", "notifications", "copilot", "reports"),
+                   "alerts", "notifications", "copilot", "reports", "leads"),
     "analytics": ("dashboards", "competitors", "reports", "copilot"),
     "admin": ("users", "roles", "llm_config", "prompts", "audit", "health", "tasks", "search", "agents"),
     "security": ("audit", "alerts", "guardrails"),

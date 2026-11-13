@@ -92,9 +92,26 @@ def test_disabled_nodes_are_ignored():
 
 @pytest.mark.parametrize("path", sorted(TEMPLATES.rglob("*.json")), ids=lambda p: p.name)
 def test_repository_templates_pass_the_checks(path):
+    """Las de ``entradas/`` son flujos de entrada (caso P2): entregan a PLATIA, no se lanzan."""
     raw = json.loads(path.read_text(encoding="utf-8"))
-    errors = [i for i in checks.run_checks({**raw, "active": True}) if i["level"] == "error"]
+    kind = "inbound" if path.parent.name == "entradas" else "launch"
+    errors = [i for i in checks.run_checks({**raw, "active": True}, kind=kind) if i["level"] == "error"]
     assert errors == []
+
+
+def test_inbound_workflows_must_deliver_with_the_key():
+    raw = json.loads((TEMPLATES / "entradas" / "p2-solicitudes-formulario-web.json").read_text(encoding="utf-8"))
+    raw["active"] = True
+    assert not checks.has_errors(checks.run_checks(raw, kind="inbound"))
+    # Un flujo de entrada no necesita Webhook ni respuesta a callback_url, pero sí la clave
+    deliver = next(n for n in raw["nodes"] if n["name"] == "Entregar a PLATIA")
+    deliver["parameters"]["authentication"] = "none"
+    assert [i["code"] for i in checks.run_checks(raw, kind="inbound") if i["level"] == "error"] == ["inbound_auth"]
+    raw["nodes"].remove(deliver)
+    assert [i["code"] for i in checks.run_checks(raw, kind="inbound") if i["level"] == "error"] == ["inbound_target"]
+    # Las reglas comunes siguen valiendo
+    raw["nodes"].append({"type": "@n8n/n8n-nodes-langchain.lmChatAnthropic", "name": "IA"})
+    assert "direct_ai" in [i["code"] for i in checks.run_checks(raw, kind="inbound")]
 
 
 def test_there_are_templates():

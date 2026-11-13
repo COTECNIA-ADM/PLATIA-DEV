@@ -22,6 +22,7 @@
 | L1 | Portal Low-Code | Aplicación `automation` del frontal: roles, inicio y catálogo de solo lectura leído de la API de n8n | — | Hecha |
 | L2 | Ejecutar y seguir | Ejecuciones en BD, tarea en la cola `automation` con su worker, webhook con clave y firma, respuesta con clave de integración, pantallas de lanzar y seguir, y un flujo de ejemplo probado con n8n real | — | Hecha |
 | L3 | Taller y publicación | Catálogo propio en BD (fichas con descripción y campos del formulario), taller con borradores, comprobaciones automáticas del flujo y revisión antes de publicar; plantillas P1 (aviso de oportunidad) y P6 (recordatorio de plazo) en `automations/`, probadas con n8n real | — | Hecha |
+| P2 | Solicitudes del formulario web | Formulario de n8n con acuse por correo; la solicitud queda pendiente en *Operaciones → Solicitudes*, avisa a comercial y una persona la convierte en contacto u oportunidad o la descarta; probado con n8n real | — | Hecha |
 | L4 | Monitorización | Flujo de errores global, consumo de IA y segunda ola de casos | — | Pendiente |
 
 ## Del núcleo mínimo a los 17 servicios del libro

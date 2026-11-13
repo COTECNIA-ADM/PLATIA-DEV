@@ -398,3 +398,32 @@ export type Memory = {
   updated_at: string
   last_accessed_at: string | null
 }
+
+// Solicitudes del formulario web (caso P2, ADR-020)
+export type LeadStatus = 'new' | 'converted' | 'discarded'
+export type LeadSummary = {
+  id: number
+  source: string
+  status: LeadStatus
+  resolution: 'contact' | 'opportunity' | null
+  full_name: string
+  email: string
+  company: string | null
+  subject: string | null
+  created_at: string
+  resolved_at: string | null
+  version: number
+}
+export type Lead = LeadSummary & {
+  phone: string | null
+  tax_id: string | null
+  message: string | null
+  ack_sent: boolean
+  workflow_id: string | null
+  client_id: number | null
+  contact_id: number | null
+  opportunity_id: number | null
+  resolved_by: number | null
+  resolution_note: string | null
+  matches: { id: number; name: string; tax_id: string | null }[]
+}

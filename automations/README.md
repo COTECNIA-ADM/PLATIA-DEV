@@ -11,7 +11,7 @@ Credenciales que usan:
 | --- | --- | --- |
 | PLATIA · clave del webhook | Header Auth (`X-Platia-Webhook-Key`) | El Webhook solo acepta llamadas de PLATIA |
 | PLATIA · clave de integración | Header Auth (`X-Platia-Integration-Key`) | La respuesta del flujo a PLATIA |
-| PLATIA · correo SMTP | SMTP | Enviar correos (plantillas P1 y P6) |
+| PLATIA · correo SMTP | SMTP | Enviar correos (plantillas P1, P6 y el acuse de P2) |
 
 ## Ejemplo
 
@@ -47,3 +47,18 @@ Campos de la ficha:
 
 Al crear la ficha en *Automatizaciones → Taller*, PLATIA propone los nombres de los datos
 que usa el flujo; solo hay que ponerles etiqueta y tipo.
+
+## Flujos de entrada
+
+No se lanzan desde PLATIA ni pasan por el Taller: recogen algo de fuera y lo entregan a
+PLATIA con la clave de integración. Llevan la etiqueta `platia-entrada`, no `platia`, para
+que no salgan como candidatos del catálogo. Los tests les pasan sus propias comprobaciones.
+
+**P2 · Solicitudes del formulario web** (`entradas/p2-solicitudes-formulario-web.json`).
+Formulario de n8n en `/form/platia-solicitud` (nombre, correo, teléfono, empresa, CIF,
+asunto, mensaje y casilla de privacidad obligatoria). Envía el acuse a quien escribe y
+entrega la solicitud en `http://backend:5000/api/leads/inbound` con `ack_sent` según haya
+ido el correo; si PLATIA no responde, reintenta tres veces. La solicitud aparece en
+*Operaciones → Solicitudes* y una persona decide si la convierte en contacto u oportunidad
+o la descarta. Antes de publicarlo, cambia el remitente (`comercial@tu-empresa.es`) del nodo
+«Enviar acuse» y, si quieres, los textos del formulario.
