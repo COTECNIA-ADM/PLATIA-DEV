@@ -1,0 +1,178 @@
+{
+  "id": "platiaSolWeb01",
+  "name": "PLATIA · P2 Solicitudes del formulario web",
+  "nodes": [
+    {
+      "id": "b2c3d4e5-0000-4000-8000-000000000001",
+      "name": "Formulario web",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b2c3d4e5-0000-4000-8000-0000000000a1",
+      "parameters": {
+        "formTitle": "Solicita información",
+        "formDescription": "Cuéntanos qué necesitas y te contestaremos lo antes posible.",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "nombre",
+              "fieldLabel": "Nombre y apellidos",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "correo",
+              "fieldLabel": "Correo electrónico",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldName": "telefono",
+              "fieldLabel": "Teléfono",
+              "fieldType": "text"
+            },
+            {
+              "fieldName": "empresa",
+              "fieldLabel": "Empresa",
+              "fieldType": "text"
+            },
+            {
+              "fieldName": "cif",
+              "fieldLabel": "CIF de la empresa",
+              "fieldType": "text"
+            },
+            {
+              "fieldName": "asunto",
+              "fieldLabel": "Asunto",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "mensaje",
+              "fieldLabel": "Mensaje",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldName": "privacidad",
+              "fieldLabel": "Privacidad",
+              "fieldType": "checkbox",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "He leído y acepto la política de privacidad"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "path": "platia-solicitud",
+          "appendAttribution": false,
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "Gracias. Hemos recibido tu solicitud y te hemos enviado un acuse por correo."
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "b2c3d4e5-0000-4000-8000-000000000002",
+      "name": "Enviar acuse",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        300,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "fromEmail": "comercial@tu-empresa.es",
+        "toEmail": "={{ $('Formulario web').item.json.correo }}",
+        "subject": "Hemos recibido tu solicitud",
+        "emailFormat": "text",
+        "text": "=Hola, {{ $('Formulario web').item.json.nombre }}:\n\nHemos recibido tu solicitud{{ $('Formulario web').item.json.asunto ? ' «' + $('Formulario web').item.json.asunto + '»' : '' }}. Una persona del equipo comercial la revisará y te contestará lo antes posible.\n\nEste mensaje es un acuse automático; no hace falta que respondas.\n\nUn saludo.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "platiaCorreoSmtp",
+          "name": "PLATIA · correo SMTP"
+        }
+      }
+    },
+    {
+      "id": "b2c3d4e5-0000-4000-8000-000000000003",
+      "name": "Entregar a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:5000/api/leads/inbound",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'formulario_web', external_ref: String($execution.id), workflow_id: $workflow.id, full_name: $('Formulario web').item.json.nombre, email: $('Formulario web').item.json.correo, phone: $('Formulario web').item.json.telefono || null, company: $('Formulario web').item.json.empresa || null, tax_id: $('Formulario web').item.json.cif || null, subject: $('Formulario web').item.json.asunto || null, message: $('Formulario web').item.json.mensaje || null, consent: ($('Formulario web').item.json.privacidad || []).length > 0, ack_sent: !$json.error }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Formulario web": {
+      "main": [
+        [
+          {
+            "node": "Enviar acuse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar acuse": {
+      "main": [
+        [
+          {
+            "node": "Entregar a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagInbound",
+      "name": "platia-entrada"
+    }
+  ]
+}

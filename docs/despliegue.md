@@ -239,6 +239,13 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    recordatorio de plazo) crea además una credencial **SMTP** llamada «PLATIA · correo SMTP»
    y cambia el remitente del nodo «Enviar correo». Los campos de cada ficha están en
    `automations/README.md`.
+10. Caso P2, solicitudes del formulario web: importa
+   `automations/entradas/p2-solicitudes-formulario-web.json`, asigna «PLATIA · correo SMTP» a
+   «Enviar acuse» y «PLATIA · clave de integración» a «Entregar a PLATIA», cambia el
+   remitente y publícalo. No pasa por el Taller: no se lanza desde PLATIA. El formulario
+   queda en http://localhost:5679/form/platia-solicitud; cada envío llega a *Operaciones →
+   Solicitudes* y avisa a quien tiene `leads.read` (de serie, `manager` y `admin` de
+   operaciones; `flask seed` se lo añade a los roles que ya existían).
 
 Un flujo se puede lanzar desde PLATIA si está activo y empieza por un nodo **Webhook** con
 método POST y autenticación «Header Auth» con la clave del webhook. Recibe en el cuerpo

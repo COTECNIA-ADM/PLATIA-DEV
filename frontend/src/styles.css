@@ -2296,3 +2296,9 @@ fieldset.field legend {
   box-shadow: none;
   background: var(--surface-2);
 }
+
+/* Solicitudes del formulario web: el mensaje se enseña tal cual, como texto */
+.text-block {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

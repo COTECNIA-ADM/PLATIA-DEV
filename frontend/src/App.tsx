@@ -16,6 +16,8 @@ const Clients = lazy(() => import('./pages/Clients'))
 const ClientDetail = lazy(() => import('./pages/ClientDetail'))
 const Talent = lazy(() => import('./pages/Talent'))
 const ProfileDetail = lazy(() => import('./pages/ProfileDetail'))
+const Leads = lazy(() => import('./pages/Leads'))
+const LeadDetail = lazy(() => import('./pages/LeadDetail'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Search = lazy(() => import('./pages/Search'))
 const Account = lazy(() => import('./pages/Account'))
@@ -39,6 +41,8 @@ export default function App() {
           <Route path="clients/:id" element={<ClientDetail />} />
           <Route path="talent" element={<Talent />} />
           <Route path="talent/:id" element={<ProfileDetail />} />
+          <Route path="leads" element={<Leads />} />
+          <Route path="leads/:id" element={<LeadDetail />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="search" element={<Search />} />
           <Route path="account" element={<Account />} />

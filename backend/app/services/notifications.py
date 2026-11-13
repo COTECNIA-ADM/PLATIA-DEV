@@ -14,6 +14,7 @@ log = structlog.get_logger(__name__)
 DEFAULT_PRIORITY = {
     "NEW_OPPORTUNITY": "high",
     "OPPORTUNITY_MATCH": "high",
+    "NEW_LEAD": "high",
     "DEAL_STALLED": "normal",
     "ACCOUNT_RISK": "high",
     "REPORT_READY": "normal",
@@ -73,6 +74,20 @@ def operations_managers() -> list[int]:
                UserAppMembership.is_active.is_(True), User.is_active.is_(True))
     ).all()
     return sorted(set(managers) | set(superadmins()))
+
+
+def holders_of(app_code: str, module: str, action: str) -> list[int]:
+    """Usuarios activos cuyo rol en la app tiene ``módulo.acción`` (o es de administración),
+    más los superadmin."""
+    rows = db.session.execute(
+        db.select(UserAppMembership.user_id, AppRole.is_admin, AppRole.permissions)
+        .join(App, App.id == UserAppMembership.app_id)
+        .join(AppRole, AppRole.id == UserAppMembership.role_id)
+        .join(User, User.id == UserAppMembership.user_id)
+        .where(App.code == app_code, UserAppMembership.is_active.is_(True), User.is_active.is_(True))
+    ).all()
+    allowed = {uid for uid, is_admin, perms in rows if is_admin or action in (perms or {}).get(module, [])}
+    return sorted(allowed | set(superadmins()))
 
 
 def superadmins() -> list[int]:

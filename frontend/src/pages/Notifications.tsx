@@ -9,6 +9,7 @@ import { Badge, Empty, ErrorBox, Pager, Spinner, errorMessage, useToast } from '
 const TYPES: Record<string, string> = {
   NEW_OPPORTUNITY: 'Oportunidad nueva',
   OPPORTUNITY_MATCH: 'Encaja contigo',
+  NEW_LEAD: 'Solicitud web',
   DEAL_STALLED: 'Sin avances',
   ACCOUNT_RISK: 'Riesgo de cliente',
   REPORT_READY: 'Listo',

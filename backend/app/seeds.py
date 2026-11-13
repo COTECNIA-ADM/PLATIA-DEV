@@ -39,7 +39,7 @@ ROLES = {
             "proposals": ["read", "write", "delete", "manage", "approve", "send"],
             "templates": RW, "portfolio": RW, "talent": ["read", "write", "delete"],
             "alerts": RW, "notifications": R, "reports": ["read", "generate"], "copilot": RW,
-            "ai_modules_access": AI_ALL,
+            "leads": ["read", "manage"], "ai_modules_access": AI_ALL,
         }),
         # El analista solo modifica lo que tiene asignado (autorización por objeto)
         "analyst": ("Analista", False, {
@@ -89,7 +89,7 @@ ROLES = {
 # Módulos de permiso que llegaron en fases posteriores: se añaden a los roles de
 # serie que ya existían en la BD (solo si el rol no tiene ese módulo; no se
 # tocan los permisos que un administrador haya cambiado).
-LATER_MODULES = {"search", "copilot", "agents", "competitors"}
+LATER_MODULES = {"search", "copilot", "agents", "competitors", "leads"}
 
 # Patrones de la primera capa del clasificador (Capítulo 13). Redacción propia.
 # Se aplican sobre el texto en minúsculas y sin tildes. Editables desde Admin.

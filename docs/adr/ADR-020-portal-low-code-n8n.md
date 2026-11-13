@@ -89,6 +89,26 @@ perderían los permisos de PLATIA, la auditoría y el coste por persona.
 - No se exige que publique una persona distinta de la que construye: en instalaciones
   pequeñas es la misma. Queda registrado quién envió y quién publicó.
 
+**Entradas de fuera: solicitudes del formulario web (caso P2)**
+- Un flujo de n8n con un formulario propio (sin usuario de PLATIA) envía el acuse a quien
+  escribe y entrega la solicitud en `POST /api/leads/inbound` con la clave de integración. Es
+  la segunda ruta sin sesión de persona; se repite sin duplicar gracias a `external_ref` (el id
+  de la ejecución de n8n).
+- PLATIA la guarda en `operations_db.inbound_leads` y avisa en el centro de avisos a quien
+  tiene `leads.read` en operaciones. Lo que llega de fuera nunca crea clientes, contactos ni
+  oportunidades por sí solo: una persona con `leads.manage` la convierte en contacto (de un
+  cliente nuevo o existente, con sugerencias por NIF, nombre o correo), en contacto más
+  oportunidad (`source = formulario_web`), o la descarta. Crear exige además `clients.write`
+  y `opportunities.write`, porque son altas de esos módulos.
+- Sin la casilla de privacidad marcada no se guarda nada (`consent` debe ser `true`). El
+  texto se guarda acotado y se enseña como texto, nunca como HTML, y no se pasa a la IA.
+- Estos flujos de entrada (`automations/entradas/`) tienen sus propias comprobaciones: entregar
+  a `/api/leads/inbound` con «Header Auth», más las comunes (sin nodos prohibidos, sin IA
+  directa, sin claves escritas).
+- Mientras n8n sea solo de desarrollo, el formulario no se publica en internet. Antes de
+  hacerlo hará falta un captcha o un límite por IP delante: el acuse va a la dirección que
+  escribe cualquiera.
+
 ## Alternativas descartadas
 - **Firmar solo con HMAC, sin clave en cabecera:** el nodo Webhook de n8n no sabe comprobar
   una firma, y hacerlo en un nodo de código obligaría a escribir el secreto en el flujo,

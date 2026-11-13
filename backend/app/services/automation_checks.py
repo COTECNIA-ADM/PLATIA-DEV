@@ -5,6 +5,11 @@ impiden enviar la ficha a revisión y publicarla; los ``warning`` se enseñan, p
 bloquean. Las mismas reglas se aplican en los tests a las plantillas de ``automations/``.
 
 Nunca se devuelve el texto encontrado (podría ser un secreto): solo el nodo y la regla.
+
+Hay dos clases de flujo:
+- ``launch``: se lanza desde el catálogo; empieza por un Webhook y responde a ``callback_url``.
+- ``inbound``: recoge algo de fuera (por ejemplo, el formulario web del caso P2) y lo entrega en
+  ``/api/leads/inbound`` con la clave de integración. No pasa por el catálogo.
 """
 import re
 
@@ -66,8 +71,29 @@ def input_names(raw: dict) -> list[str]:
     return sorted(names)
 
 
-def run_checks(raw: dict, fields: list[dict] | None = None) -> list[dict]:
-    nodes = [n for n in raw.get("nodes") or [] if not n.get("disabled")]
+INBOUND_PATH = "/api/leads/inbound"
+
+
+def _header_auth(params: dict) -> bool:
+    return params.get("authentication") == "genericCredentialType" and params.get("genericAuthType") == "httpHeaderAuth"
+
+
+def _inbound_checks(nodes: list[dict]) -> list[dict]:
+    issues = []
+    targets = [n for n in nodes if n.get("type") == HTTP_REQUEST
+               and INBOUND_PATH in str((n.get("parameters") or {}).get("url") or "")]
+    if not targets:
+        issues.append(_issue("inbound_target", "error",
+                             f"El flujo no entrega nada a PLATIA: falta un HTTP Request a «{INBOUND_PATH}»."))
+    for node in targets:
+        if not _header_auth(node.get("parameters") or {}):
+            issues.append(_issue("inbound_auth", "error",
+                                 "La entrega a PLATIA debe llevar la clave de integración («Header Auth»).",
+                                 node.get("name")))
+    return issues
+
+
+def _launch_checks(nodes: list[dict]) -> list[dict]:
     issues: list[dict] = []
 
     hooks = [n for n in nodes if n.get("type") == WEBHOOK]
@@ -91,13 +117,19 @@ def run_checks(raw: dict, fields: list[dict] | None = None) -> list[dict]:
         params = node.get("parameters") or {}
         if "callback_url" in str(params.get("url") or ""):
             callbacks.append(node)
-            if params.get("authentication") != "genericCredentialType" or params.get("genericAuthType") != "httpHeaderAuth":
+            if not _header_auth(params):
                 issues.append(_issue("callback_auth", "error",
                                      "La respuesta a PLATIA debe llevar la clave de integración («Header Auth»).",
                                      node.get("name")))
     if not callbacks:
         issues.append(_issue("callback", "error",
                              "El flujo no responde a PLATIA: falta un HTTP Request a «callback_url».",))
+    return issues
+
+
+def run_checks(raw: dict, fields: list[dict] | None = None, kind: str = "launch") -> list[dict]:
+    nodes = [n for n in raw.get("nodes") or [] if not n.get("disabled")]
+    issues = _inbound_checks(nodes) if kind == "inbound" else _launch_checks(nodes)
 
     for node in nodes:
         ntype = node.get("type") or ""
