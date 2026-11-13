@@ -246,6 +246,12 @@ n8n es una capa opcional (ADR-020). Por ahora solo en desarrollo: `deploy.sh` no
    queda en http://localhost:5679/form/platia-solicitud; cada envío llega a *Operaciones →
    Solicitudes* y avisa a quien tiene `leads.read` (de serie, `manager` y `admin` de
    operaciones; `flask seed` se lo añade a los roles que ya existían).
+11. Flujo de errores (fase L4): importa `automations/errores/platia-flujo-de-errores.json`,
+   asigna «PLATIA · clave de integración» a «Avisar a PLATIA» y publícalo. Después, en cada
+   flujo, **Settings → Error workflow → PLATIA · Flujo de errores** (las plantillas ya lo
+   traen si se importan con su id). Los fallos salen en *Automatizaciones → Monitorización*.
+   Para enlazar un fallo con la ejecución de PLATIA, la clave `N8N_API_KEY` debe poder leer
+   ejecuciones.
 
 Un flujo se puede lanzar desde PLATIA si está activo y empieza por un nodo **Webhook** con
 método POST y autenticación «Header Auth» con la clave del webhook. Recibe en el cuerpo

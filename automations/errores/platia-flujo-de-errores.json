@@ -1,0 +1,69 @@
+{
+  "id": "platiaErrores01",
+  "name": "PLATIA · Flujo de errores",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c3d4e5f6-0000-4000-8000-000000000002",
+      "name": "Avisar a PLATIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:5000/api/automation/incidents/inbound",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow_id: String($json.workflow.id), workflow_name: $json.workflow.name || null, execution_id: $json.execution && $json.execution.id ? String($json.execution.id) : null, mode: ($json.execution && $json.execution.mode) || ($json.trigger && $json.trigger.mode) || null, node: ($json.execution && $json.execution.lastNodeExecuted) || null, message: String(($json.execution && $json.execution.error && $json.execution.error.message) || ($json.trigger && $json.trigger.error && $json.trigger.error.message) || 'Error sin mensaje').slice(0, 2000) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "platiaCallback01",
+          "name": "PLATIA · clave de integración"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Avisar a PLATIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "id": "platiaTagErrors",
+      "name": "platia-errores"
+    }
+  ]
+}

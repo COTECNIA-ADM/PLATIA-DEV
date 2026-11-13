@@ -86,3 +86,34 @@ export type Run = {
 }
 
 export type RunDetail = Run & { input: Record<string, unknown>; result: Record<string, unknown> | null }
+
+// Monitorización (fase L4)
+export type WorkflowHealth = {
+  workflow_id: string
+  workflow_name: string | null
+  runs: number
+  succeeded: number
+  failed: number
+  open: number
+  success_rate: number | null
+  avg_seconds: number | null
+  last_run_at: string | null
+  open_incidents: number
+}
+
+export type Incident = {
+  id: number
+  workflow_id: string
+  workflow_name: string | null
+  execution_id: string | null
+  mode: string | null
+  node: string | null
+  message: string | null
+  run_id: number | null
+  status: 'open' | 'resolved'
+  created_at: string
+  resolved_by: number | null
+  resolved_at: string | null
+  resolution_note: string | null
+  version: number
+}

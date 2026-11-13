@@ -30,6 +30,7 @@ from .operations import (
     AIAnalysis,
     Alert,
     AutomationEntry,
+    AutomationIncident,
     AutomationRun,
     InboundLead,
     ChatConversation,

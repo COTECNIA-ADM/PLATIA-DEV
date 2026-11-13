@@ -15,6 +15,7 @@ DEFAULT_PRIORITY = {
     "NEW_OPPORTUNITY": "high",
     "OPPORTUNITY_MATCH": "high",
     "NEW_LEAD": "high",
+    "AUTOMATION_FAILED": "high",
     "DEAL_STALLED": "normal",
     "ACCOUNT_RISK": "high",
     "REPORT_READY": "normal",

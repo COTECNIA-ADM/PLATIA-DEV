@@ -17,9 +17,10 @@ from app.models import App, AppRole, UserAppMembership
 from app.security.registry import MODULES
 
 # Rutas sin sesión: entrar, completar el MFA, renovar con la cookie y la salud básica.
-# La respuesta de n8n y las solicitudes del formulario web que entrega n8n no llevan sesión de
-# persona: exigen la clave de integración (ADR-020).
-PUBLIC = {"auth.login", "auth.mfa_verify", "auth.refresh", "health.quick", "automation.callback", "leads.inbound"}
+# La respuesta de n8n, las solicitudes del formulario web y los fallos que avisa el flujo de
+# errores de n8n no llevan sesión de persona: exigen la clave de integración (ADR-020).
+PUBLIC = {"auth.login", "auth.mfa_verify", "auth.refresh", "health.quick", "automation.callback",
+          "automation.incident_inbound", "leads.inbound"}
 # Rutas de la propia cuenta: basta con la sesión (no dependen de un permiso del rol)
 SESSION_ONLY = {"auth.me", "auth.logout", "auth.change_password", "auth.mfa_setup", "auth.mfa_enable",
                 "auth.mfa_disable"}

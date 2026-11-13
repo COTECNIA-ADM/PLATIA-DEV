@@ -493,6 +493,7 @@ class Notification(BusinessMixin, db.Model):
         "REPORT_READY",
         "OPPORTUNITY_MATCH",
         "NEW_LEAD",
+        "AUTOMATION_FAILED",
         "SYSTEM",
     )
     PRIORITIES = ("low", "normal", "high", "urgent")
@@ -648,6 +649,38 @@ class InboundLead(VersionedMixin, BusinessMixin, db.Model):
     client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"))
     contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id"))
     opportunity_id: Mapped[int | None] = mapped_column(ForeignKey("opportunities.id"))
+    resolved_by: Mapped[int | None] = mapped_column(Integer)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    resolution_note: Mapped[str | None] = mapped_column(String(1000))
+
+
+class AutomationIncident(VersionedMixin, BusinessMixin, db.Model):
+    """Fallo de un flujo de n8n que avisa el flujo de errores común (fase L4).
+
+    Llega con la clave de integración. Guarda solo lo necesario para investigar: el flujo, la
+    ejecución de n8n, el nodo y el mensaje acotado; nunca los datos del flujo. Si el fallo es
+    de una ejecución lanzada desde PLATIA, ``run_id`` la enlaza y la ejecución se cierra como
+    fallida sin esperar al plazo.
+    """
+
+    __bind_key__ = BIND
+    __tablename__ = "automation_incidents"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "execution_id", name="uq_automation_incidents_execution"),
+        Index("ix_automation_incidents_status_created", "status", "created_at"),
+    )
+
+    STATUSES = ("open", "resolved")
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workflow_name: Mapped[str | None] = mapped_column(String(255))
+    execution_id: Mapped[str | None] = mapped_column(String(64))
+    mode: Mapped[str | None] = mapped_column(String(20))  # webhook, trigger, manual...
+    node: Mapped[str | None] = mapped_column(String(255))
+    message: Mapped[str | None] = mapped_column(String(500))
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("automation_runs.id"))
+    status: Mapped[str] = mapped_column(String(12), default="open", nullable=False)
     resolved_by: Mapped[int | None] = mapped_column(Integer)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     resolution_note: Mapped[str | None] = mapped_column(String(1000))

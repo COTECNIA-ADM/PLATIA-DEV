@@ -769,3 +769,21 @@ class LeadResolveIn(Versioned):
         if self.action == "contact" and self.opportunity_title:
             raise ValueError("El título solo se usa al crear una oportunidad.")
         return self
+
+
+# ---------------------------------------------------------------- Incidencias de n8n (fase L4)
+class AutomationIncidentIn(Schema):
+    """Lo que envía el flujo de errores común de n8n. El mensaje largo se recorta al guardar."""
+
+    workflow_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64,
+                                                  pattern=r"^[A-Za-z0-9]+$")]
+    workflow_name: OptStr255 = None
+    execution_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64,
+                                                   pattern=r"^[A-Za-z0-9_-]*$")] | None = None
+    mode: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)] | None = None
+    node: OptStr255 = None
+    message: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] | None = None
+
+
+class AutomationIncidentResolveIn(Versioned):
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] | None = None

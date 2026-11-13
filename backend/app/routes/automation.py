@@ -11,22 +11,26 @@ Solo dentro de la app automation (``X-App-Code: automation``).
   suyas; ``automations.manage`` ve todas.
 - Respuesta de n8n (``/runs/<id>/callback``): sin sesión de persona, con la clave de
   integración ``N8N_CALLBACK_KEY`` en ``X-Platia-Integration-Key``.
+- Monitorización (L4): el flujo de errores común entrega los fallos en
+  ``/incidents/inbound`` (misma clave de integración); quien construye ve incidencias y salud
+  (``automations.build``) y quien administra las resuelve (``automations.manage``).
 """
 import hmac
 
 from flask import Blueprint, current_app, g, jsonify, request
 
 from ..api.common import MAX_SEARCH_LENGTH, check_version, page_args, paginate, parse_body
-from ..api.schemas import (AutomationCallbackIn, AutomationEntryIn, AutomationEntryPatch, AutomationReviewIn,
-                           AutomationRunIn, Versioned)
+from ..api.schemas import (AutomationCallbackIn, AutomationEntryIn, AutomationEntryPatch, AutomationIncidentIn,
+                           AutomationIncidentResolveIn, AutomationReviewIn, AutomationRunIn, Versioned)
 from ..errors import BusinessRuleError, ForbiddenError, NotFoundError
 from ..extensions import db
-from ..models import AuditAction, AutomationEntry, AutomationRun
+from ..models import AuditAction, AutomationEntry, AutomationIncident, AutomationRun
 from ..queue import enqueue
 from ..security.audit import audit
 from ..security.context import platform_guard, require_permission
 from ..security.ratelimit import rate_limit
 from ..services import automation as service
+from ..services import automation_incidents as incidents
 
 automation_bp = Blueprint("automation", __name__, url_prefix="/api/automation")
 
@@ -292,15 +296,83 @@ def get_run(run_id: int):
     return jsonify(service.run_dict(_get_run(run_id), full=True))
 
 
-@automation_bp.post("/runs/<int:run_id>/callback")
-@rate_limit("RATE_LIMIT_WRITE", scope="ip")
-def callback(run_id: int):
+def _integration_key_ok() -> bool:
     expected = current_app.config.get("N8N_CALLBACK_KEY") or ""
     given = request.headers.get("X-Platia-Integration-Key") or ""
     if not expected or not hmac.compare_digest(given.encode(), expected.encode()):
         audit(AuditAction.ACCESS_DENIED, "WARNING", details={"path": request.path, "reason": "integration_key"})
+        return False
+    return True
+
+
+@automation_bp.post("/runs/<int:run_id>/callback")
+@rate_limit("RATE_LIMIT_WRITE", scope="ip")
+def callback(run_id: int):
+    if not _integration_key_ok():
         return jsonify(error="Autenticación requerida."), 401
     data = parse_body(AutomationCallbackIn)
     run = service.complete(run_id, data.status, data.result, data.error)
     db.session.commit()
     return jsonify({"id": run.id, "status": run.status})
+
+
+# ---------------------------------------------------------------- Monitorización (fase L4)
+@automation_bp.post("/incidents/inbound")
+@rate_limit("RATE_LIMIT_WRITE", scope="ip")
+def incident_inbound():
+    if not _integration_key_ok():
+        return jsonify(error="Autenticación requerida."), 401
+    incident, created = incidents.record(parse_body(AutomationIncidentIn).model_dump())
+    db.session.commit()
+    if created:
+        audit(AuditAction.RECORD_CREATED, "WARNING", resource_type="automation_incident", resource_id=incident.id,
+              details={"workflow_id": incident.workflow_id, "run_id": incident.run_id})
+    return jsonify({"id": incident.id, "run_id": incident.run_id, "duplicate": not created}), 201 if created else 200
+
+
+@automation_bp.get("/incidents")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_READ")
+def list_incidents():
+    stmt = AutomationIncident.select_active()
+    if (status := request.args.get("status")) in AutomationIncident.STATUSES:
+        stmt = stmt.where(AutomationIncident.status == status)
+    if workflow_id := (request.args.get("workflow_id") or "").strip()[:64]:
+        stmt = stmt.where(AutomationIncident.workflow_id == workflow_id)
+    stmt = stmt.order_by(AutomationIncident.created_at.desc(), AutomationIncident.id.desc())
+    return jsonify(paginate(stmt, incidents.incident_dict))
+
+
+@automation_bp.post("/incidents/<int:incident_id>/resolve")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "manage")
+@rate_limit("RATE_LIMIT_WRITE")
+def resolve_incident(incident_id: int):
+    incident = db.session.scalar(AutomationIncident.select_active().where(AutomationIncident.id == incident_id))
+    if incident is None:
+        raise NotFoundError("Incidencia no encontrada.")
+    data = parse_body(AutomationIncidentResolveIn)
+    check_version(incident, data.version)
+    incidents.resolve(incident, g.security.user_id, data.note)
+    db.session.commit()
+    audit(AuditAction.RECORD_UPDATED, user_id=g.security.user_id, resource_type="automation_incident",
+          resource_id=incident.id, details={"step": "resolve", "workflow_id": incident.workflow_id})
+    return jsonify(incidents.incident_dict(incident))
+
+
+@automation_bp.get("/health")
+@platform_guard
+@_automation_app_only
+@require_permission("automations", "build")
+@rate_limit("RATE_LIMIT_READ")
+def workflow_health():
+    try:
+        days = min(max(int(request.args.get("days", 30)), 1), 365)
+    except ValueError:
+        days = 30
+    items = incidents.health(days)
+    return jsonify({"days": days, "items": items,
+                    "open_incidents": sum(i["open_incidents"] for i in items)})
